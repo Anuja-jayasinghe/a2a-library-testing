@@ -6,19 +6,14 @@
 
 import ballerina/io;
 
-configurable int agentPort = 9095;
-
 public function main() returns error? {
     check webhookListener.'start();
 
-    string agentUrl = string `http://localhost:${agentPort}`;
-    string webhookUrl = string `http://localhost:${webhookPort}/webhook/receiver`;
-
-    io:println("A2A lifecycle demo -- Ballerina client driving a Ballerina listener");
+    io:println("A2A lifecycle demo -- two Claude-backed Ballerina agents, client and server");
     io:println(string `Agent:   ${agentUrl} (run the server package first)`);
-    io:println(string `Webhook: ${webhookUrl}`);
+    io:println(string `Webhook: http://localhost:${webhookPort}/webhook/receiver`);
 
-    error? demoResult = runLifecycleDemo(agentUrl, webhookUrl);
+    error? demoResult = runLifecycleDemo();
 
     check webhookListener.immediateStop();
 

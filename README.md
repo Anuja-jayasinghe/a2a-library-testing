@@ -1,101 +1,133 @@
 # A2A Lifecycle Demo
 
-A complete, working demonstration of `ballerina/a2a`: a real A2A agent
-served by Ballerina's `a2a:Listener`, and a real A2A client (Ballerina's
-`a2a:HttpClient`) driving it through every operation the library
-implements -- two separate processes, exactly like a real deployment,
-communicating over the actual A2A HTTP+JSON wire protocol.
+A complete, working demonstration of `ballerina/a2a`: **two real, independent
+LLM agents** -- both built with `ballerina/ai`'s `Agent` abstraction, both
+backed by Anthropic's Claude via `ballerinax/ai.anthropic` -- talking to each
+other over the actual A2A HTTP+JSON wire protocol via `ballerina/a2a`'s
+current client and listener implementation. Nothing here hand-rolls an HTTP
+call to the remote agent or to Anthropic; every A2A operation goes through
+`ballerina/a2a`, and every model call goes through `ballerina/ai`.
+
+- **`server/`** -- a Trip Planner agent: an `ai:Agent` wrapped as an
+  `a2a:Service`, served by an `a2a:Listener`.
+- **`client/`** -- a Traveler agent: a second, separate `ai:Agent`, given
+  A2A operations against the Trip Planner as tools (`client/toolkit.bal`),
+  wrapped around an `a2a:HttpClient`.
+
+Two separate processes, exactly like a real deployment.
 
 ## What it demonstrates
 
-Running the client against the server walks through:
+The client's Traveler agent is walked through six scenarios, each a fixed
+prompt but a genuine, independent LLM decision about which tool(s) to call
+and how -- not a scripted exchange:
 
-1. **Agent discovery** -- `resolveAgentCard`, printing the discovered
-   card's declared capabilities.
-2. **`sendMessage`** -- the ordinary blocking path (task created, driven
-   to `TASK_STATE_COMPLETED`, one artifact).
-3. **A direct `Message` reply** -- no task at all, for a trivial reply.
-4. **`sendStreamingMessage`** -- genuinely live events as the agent
-   produces them (not a replayed array), watched as they arrive over
-   several real seconds.
-5. **`subscribeToTask` + `cancelTask`** -- a second, independent
-   connection attaches to a task already in flight, sees it live, then
-   watches it end the moment the task is canceled.
-6. **Push notifications** -- a webhook is registered inline on the send
-   request; the client's own local webhook receiver actually receives
-   the delivery when the task completes.
-7. **Multi-turn continuation** -- the agent pauses at
-   `TASK_STATE_INPUT_REQUIRED`, and a second message (naming the same
-   `taskId`) continues the *same* task to completion.
-8. **`getTask` / `listTasks`**.
-9. **Capability-gated rejection** -- `getExtendedAgentCard` against an
-   agent that never configured one, decoded as the typed
-   `UnsupportedOperationError` the spec requires.
+1. **A fresh request, no destination** -- `sendToTripPlanner`. The server
+   agent's own model decides it doesn't have enough information and pauses
+   the task at `TASK_STATE_INPUT_REQUIRED`, asking a clarifying question.
+2. **Continuation** -- `continueTripPlannerTask` answers with a destination.
+   The server reuses the *same* underlying LLM conversation (the A2A
+   `contextId` doubles as the `ai:Agent` session id), so it remembers it
+   already asked the question, and completes the task with an itinerary.
+3. **`getTripPlannerTaskStatus` + `listTripPlannerTasks`**.
+4. **Push notifications** -- `registerTripPlannerWebhook` registers the
+   client's own local webhook receiver; delivery is verified independently
+   of what the model reports, by actually checking the receiver's state.
+5. **Cancellation mid-flight** -- `startTripPlannerTaskWithoutWaiting`
+   (using `returnImmediately: true` so the call returns before the server's
+   model call finishes) immediately followed by `cancelTripPlannerTask`,
+   racing a real, still-running LLM call.
+6. **Live streaming** -- `streamFromTripPlanner` watches the server agent's
+   progress as genuinely live events, not a replayed array.
 
 ## Why two separate packages
 
-`server/` and `client/` are two independent Ballerina packages, run as
-two independent processes -- not one combined program. This is
-deliberate, not incidental: a `bal run` program that both starts a
-listener and makes outbound client calls in the same process does not
-reliably exit on its own even after explicitly stopping the listener
-(confirmed empirically while building this demo -- a plain
-`http:Client`-only program exits immediately, but a single `http:Listener`
-kept the process alive for minutes past `immediateStop()`, seemingly tied
-to the underlying HTTP transport's own connection-pool threads, which
-outlive any one listener's lifecycle). Splitting into a genuinely
-long-running server and a one-shot client sidesteps that entirely, and
-happens to be a more realistic demonstration besides -- this is exactly
-how the two sides of an A2A conversation actually run in practice.
+`server/` and `client/` are two independent Ballerina packages, run as two
+independent processes -- not one combined program. This is deliberate, not
+incidental: a `bal run` program that both starts a listener and makes
+outbound client calls in the same process does not reliably exit on its own
+even after explicitly stopping the listener (confirmed empirically while
+building this demo -- a plain `http:Client`-only program exits immediately,
+but a single `http:Listener` kept the process alive for minutes past
+`immediateStop()`, seemingly tied to the underlying HTTP transport's own
+connection-pool threads, which outlive any one listener's lifecycle).
+Splitting into a genuinely long-running server and a one-shot client
+sidesteps that entirely, and happens to be a more realistic demonstration
+besides -- this is exactly how the two sides of an A2A conversation actually
+run in practice.
 
-The client package additionally forces its own process to exit via a
-small Java interop call once the demo finishes (`process_exit.bal`) --
-see that file's own comment for why.
+The client package additionally forces its own process to exit via a small
+Java interop call once the demo finishes (`process_exit.bal`) -- see that
+file's own comment for why.
 
 ## Running it
 
-Requires `ballerina/a2a` to be available locally (it is not yet published
-to Ballerina Central):
+Requires `ballerina/a2a` to be available locally (it is not yet published to
+Ballerina Central):
 
 ```sh
 cd ~/gitProject/module-ballerina-a2a/ballerina
 bal pack && bal push --repository=local
 ```
 
-Then, in one terminal, start the server (it runs until you stop it,
-like any real agent deployment):
+You'll also need an Anthropic API key -- both packages require one via the
+`anthropicApiKey` configurable variable (there is no default; each package
+fails fast with a clear error if it's missing). Either add a `Config.toml`
+next to each package's `Ballerina.toml`:
+
+```toml
+anthropicApiKey = "sk-ant-..."
+```
+
+or pass it on the command line. Ballerina configurable overrides need a
+`-C` prefix -- `bal run -- key=value` silently fails to apply and falls
+through to the "missing configurable" error, so it must be:
+
+```sh
+bal run -- -CanthropicApiKey=sk-ant-...
+```
+
+Then, in one terminal, start the server (it runs until you stop it, like
+any real agent deployment):
 
 ```sh
 cd server
-bal run
+bal run -- -CanthropicApiKey=sk-ant-...
 ```
 
 In a second terminal, run the client:
 
 ```sh
 cd client
-bal run
+bal run -- -CanthropicApiKey=sk-ant-...
 ```
 
-The client prints each step as it happens and exits on its own once the
-walkthrough completes. Stop the server afterward with Ctrl+C.
+The client prints each scenario and the Traveler agent's report of what
+happened as it goes, and exits on its own once the walkthrough completes.
+Stop the server afterward with Ctrl+C.
 
 ### Pointing at different ports
 
-Both packages default to `agentPort = 9095`; the client additionally
-defaults its own webhook receiver to `webhookPort = 9096`. Override
-either with `bal run -- agentPort=9100` / `webhookPort=9101` (keep both
-packages' `agentPort` in sync if you change it).
+The server defaults to `agentPort = 9095`; the client's `toolkit.bal`
+defaults `agentUrl = "http://localhost:9095"` to match, and its own webhook
+receiver defaults to `webhookPort = 9096`. Override with
+`-CagentPort=9100` / `-CagentUrl=http://localhost:9100` /
+`-CwebhookPort=9101` as needed (keep the client's `agentUrl` in sync with
+whatever port the server actually uses).
 
 ## Code structure
 
-- `server/main.bal` -- the whole agent: an `a2a:Listener`, the served
-  `AgentCard`, and `DemoAgent`, an `a2a:Service` implementing every task
-  state via trigger texts (`ping`, `ask`, `slow`, anything else).
+- `server/main.bal` -- the Trip Planner agent: an `ai:Agent` (Claude-backed,
+  via `ballerinax/ai.anthropic`) wrapped as `TripPlannerAgentService`, an
+  `a2a:Service` served by an `a2a:Listener`. The model's structured reply
+  (`NEEDS_INFO:` / `ITINERARY:` prefixes) drives the A2A task state machine.
+- `client/toolkit.bal` -- `TripPlannerToolKit`, giving the client's
+  `ai:Agent` real A2A operations (send, continue, stream, status, cancel,
+  list, webhook registration) as tools, built directly on `a2a:HttpClient`.
+- `client/client_demo.bal` -- the Traveler agent and its six numbered
+  scenarios.
 - `client/main.bal` -- orchestrates the client package: starts the local
   webhook receiver, runs the walkthrough, exits.
-- `client/client_demo.bal` -- the actual lifecycle walkthrough, one
-  numbered section per A2A operation.
 - `client/webhook.bal` -- a minimal HTTP receiver standing in for "the
   client's own server", proving push-notification delivery actually
   happens.
