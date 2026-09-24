@@ -100,6 +100,22 @@ says HTTP+JSON uses `application/json`; the released v1.0.0 spec (sections
 11.1 and 14.1.1) says `application/a2a+json`, so the three `Content-Type`
 failures it reports are the TCK's, not the library's.
 
+## Long-running checks
+
+The Claude agents answer in a second or two, so they cannot show how streaming, subscribe, push notifications and
+cancellation behave on work that takes over a minute. Two more packages do:
+
+- `slow-agent` -- a deterministic agent whose tasks run about 70 seconds (progress every 10s, or a silent stretch,
+  or a pause for input first). No API key needed.
+- `long-run-checks` -- drives `ballerina/a2a`'s client against it and prints a timestamped account. One scenario per
+  run: `stream`, `stream-silent`, `push`, `subscribe`, `cancel`, `toolkit-continue`.
+
+```sh
+cd slow-agent && bal run                                   # terminal 1, port 9098
+cd long-run-checks && bal build
+java -jar target/bin/a2a_long_run_checks.jar -Cscenario=push -CwebhookPort=9198
+```
+
 ## Troubleshooting
 
 | Symptom | Fix |
