@@ -71,36 +71,40 @@ bal pack && bal push --repository=local
 ```
 
 You'll also need an Anthropic API key -- both packages require one via the
-`anthropicApiKey` configurable variable (there is no default; each package
-fails fast with a clear error if it's missing). Either add a `Config.toml`
-next to each package's `Ballerina.toml`:
-
-```toml
-anthropicApiKey = "sk-ant-..."
-```
-
-or pass it on the command line. Ballerina configurable overrides need a
-`-C` prefix -- `bal run -- key=value` silently fails to apply and falls
-through to the "missing configurable" error, so it must be:
+same `anthropicApiKey` configurable variable (there is no default; each
+package fails fast with a clear error if it's missing). Set it **once, at
+the repo root**, and both packages pick it up automatically:
 
 ```sh
-bal run -- -CanthropicApiKey=sk-ant-...
+cp .env.example .env   # then edit .env and paste in a real key
+source .env
 ```
+
+This works because `.env` sets `BAL_CONFIG_DATA`, Ballerina's own mechanism
+for satisfying a configurable variable from a plain OS environment variable
+(its content is parsed as TOML) -- since both packages declare the same
+variable name, one `source .env` covers both, with no per-package
+`Config.toml` and no flag on either `bal run`. See `.env.example` for
+details.
 
 Then, in one terminal, start the server (it runs until you stop it, like
 any real agent deployment):
 
 ```sh
 cd server
-bal run -- -CanthropicApiKey=sk-ant-...
+bal run
 ```
 
 In a second terminal, run the client:
 
 ```sh
 cd client
-bal run -- -CanthropicApiKey=sk-ant-...
+bal run
 ```
+
+(Prefer a one-off override instead? Ballerina also accepts
+`bal run -- -CanthropicApiKey=sk-ant-...` on the command line -- note the
+required `-C` prefix, since a bare `key=value` silently fails to apply.)
 
 The client prints each scenario and the Traveler agent's report of what
 happened as it goes, and exits on its own once the walkthrough completes.
