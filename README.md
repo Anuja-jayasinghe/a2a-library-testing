@@ -13,6 +13,7 @@ with `ballerina/a2a`, `ballerina/ai` and `ballerinax/ai.anthropic`.
 | `server`  | Trip Planner agent (`a2a:Listener` + `ai:Agent`)                  | 9095 |
 | `server2` | Packing Assistant agent (same shape, different persona)           | 9097 |
 | `client`  | Traveler agent using `ai:A2aToolKit`; you chat with it in a prompt | 9096 (webhook receiver) |
+| `tck-sut` | Deterministic agent (no LLM, no API key) for the A2A TCK          | 9999 |
 
 ## Prerequisites
 
@@ -70,6 +71,35 @@ Type these into the client, in order:
 7. `Ask the Trip Planner for a Tokyo day trip, then cancel it.`
 8. `Stream a Rome day trip from the Trip Planner.`
 
+## Conformance tests (A2A TCK)
+
+`tck-sut` implements the TCK's test-agent contract, so the official
+[A2A TCK](https://github.com/a2aproject/a2a-tck) can be run against
+`ballerina/a2a`'s listener over HTTP+JSON. It needs no API key.
+
+One-time TCK setup (Python 3.11+ and `uv`):
+
+```sh
+cd ~/gitProject/a2a-tck && uv venv && source .venv/bin/activate && uv pip install -e .
+```
+
+Then run each configuration (the TCK skips requirements that depend on how the
+agent is set up, so all four are needed for full coverage):
+
+```sh
+cd tck-sut
+./run_tck.sh                     # every capability on
+./run_tck.sh no-capabilities     # streaming and push notifications withheld
+./run_tck.sh extended            # extended agent card configured
+./run_tck.sh extension           # a required extension declared (one test)
+```
+
+The script starts the agent, runs the TCK, and stops the agent. Reports land in
+`$TCK_DIR/reports/<mode>/`. Note that the TCK's bundled spec snapshot still
+says HTTP+JSON uses `application/json`; the released v1.0.0 spec (sections
+11.1 and 14.1.1) says `application/a2a+json`, so the three `Content-Type`
+failures it reports are the TCK's, not the library's.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -103,4 +133,6 @@ also works for a one-off.
 - `client/traveler.bal` — builds the Traveler `ai:Agent` with `ai:A2aToolKit` pointed at both servers.
 - `client/main.bal` — starts the webhook receiver, runs the `You:` prompt loop.
 - `client/webhook.bal` — small HTTP receiver that logs push notifications.
+- `tck-sut/main.bal` — the TCK test agent: behaviour picked by message-id prefix, configurable capabilities.
+- `tck-sut/run_tck.sh` — starts the agent in one configuration and runs the TCK against it.
 - `client/process_exit.bal` — forces the JVM to exit when you type `exit` (a running listener otherwise keeps it alive).
