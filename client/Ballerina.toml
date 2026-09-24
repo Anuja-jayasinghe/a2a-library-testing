@@ -13,5 +13,17 @@ name = "a2a"
 version = "0.1.0"
 repository = "local"
 
+# LOCAL EXPERIMENT: this `ai` carries A2aToolKit (ballerina/ai's generic,
+# multi-agent A2A toolkit -- not on Central yet), so it is consumed from
+# the local repository the same way ballerina/a2a is. Rebuild and republish
+# it with:
+#   cd ~/gitProject/module-ballerina-ai/ballerina
+#   bal pack && bal push --repository=local
+[[dependency]]
+org = "ballerina"
+name = "ai"
+version = "1.15.0"
+repository = "local"
+
 [build-options]
 observabilityIncluded = true
