@@ -66,9 +66,18 @@ Type these into the client, in order:
 3. `Tell it Paris.` — continues the same task and returns an itinerary
 4. `What's the status of that task? List all the Trip Planner's tasks.`
 5. `Ask the Packing Assistant what to pack for that trip.`
-6. `Register the webhook http://localhost:9096/webhook/receiver for that packing task.` — the client logs a line when the notification arrives
-7. `Ask the Trip Planner for a Tokyo day trip, then cancel it.`
-8. `Stream a Rome day trip from the Trip Planner.`
+6. `Ask the Packing Assistant what to pack, and forward my request exactly as is with no extra details.` — it asks a question (task pauses at `INPUT_REQUIRED`)
+7. `Register the webhook http://localhost:9096/webhook/receiver for that task.`
+8. `Tell it: a winter trip to Kyoto.` — the task completes and the client logs a line when the notification arrives
+9. `Ask the Trip Planner for a Tokyo day trip, then cancel it.`
+10. `Stream a Rome day trip from the Trip Planner.`
+
+Steps 6–8 are in that order on purpose: the server sends a push notification
+only when a task settles, so a webhook registered on an already-completed task
+never fires. Register it while the task is still paused.
+
+To confirm a task was really delegated, look for its task id in the matching
+server terminal (`task received` ... `COMPLETED`), not just in the client's reply.
 
 ## Troubleshooting
 
