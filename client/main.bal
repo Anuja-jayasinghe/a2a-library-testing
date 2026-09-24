@@ -9,9 +9,10 @@ import ballerina/io;
 public function main() returns error? {
     check webhookListener.'start();
 
-    io:println("A2A lifecycle demo -- two Claude-backed Ballerina agents, client and server");
-    io:println(string `Agent:   ${agentUrl} (run the server package first)`);
-    io:println(string `Webhook: http://localhost:${webhookPort}/webhook/receiver`);
+    io:println("A2A lifecycle demo -- three Claude-backed Ballerina agents, one client and two servers");
+    io:println(string `Trip Planner:      ${tripPlannerUrl} (run the server package first)`);
+    io:println(string `Packing Assistant: ${packingAssistantUrl} (run the server2 package first)`);
+    io:println(string `Webhook:           http://localhost:${webhookPort}/webhook/receiver`);
 
     error? demoResult = runLifecycleDemo();
 
