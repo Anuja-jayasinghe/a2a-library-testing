@@ -1,0 +1,17 @@
+[package]
+org = "anujaj"
+name = "a2a_demo_packing_agent"
+version = "0.1.0"
+distribution = "2201.13.5"
+
+# ballerina/a2a is not published to Ballerina Central yet, so it must be
+# pulled from the local repository -- built and pushed there via
+# `cd ~/gitProject/module-ballerina-a2a/ballerina && bal pack && bal push --repository=local`.
+[[dependency]]
+org = "ballerina"
+name = "a2a"
+version = "0.1.0"
+repository = "local"
+
+[build-options]
+observabilityIncluded = true
