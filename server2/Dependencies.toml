@@ -15,6 +15,7 @@ dependencies = [
 	{org = "ballerina", name = "a2a"},
 	{org = "ballerina", name = "ai"},
 	{org = "ballerina", name = "io"},
+	{org = "ballerina", name = "log"},
 	{org = "ballerina", name = "uuid"},
 	{org = "ballerinai", name = "observe"},
 	{org = "ballerinax", name = "ai.anthropic"}
@@ -289,6 +290,9 @@ dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "lang.value"},
 	{org = "ballerina", name = "observe"}
+]
+modules = [
+	{org = "ballerina", packageName = "log", moduleName = "log"}
 ]
 
 [[package]]
