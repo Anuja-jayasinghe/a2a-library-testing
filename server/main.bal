@@ -13,6 +13,7 @@
 import ballerina/a2a;
 import ballerina/ai;
 import ballerina/io;
+import ballerina/log;
 import ballerina/uuid;
 import ballerinax/ai.anthropic;
 
@@ -85,6 +86,11 @@ isolated service class TripPlannerAgentService {
         check updater->working();
 
         string userText = extractText(context.message);
+        string taskId = updater.getTaskId();
+        boolean isContinuation = context.message.taskId is string;
+        log:printInfo("Trip Planner: task received", taskId = taskId, contextId = updater.getContextId(),
+                continuation = isContinuation, request = userText);
+        log:printInfo("Trip Planner: asking Claude", taskId = taskId);
         // The A2A contextId as the ai:Agent session id: a continuation
         // (same task, same context) reuses the same LLM conversation, so
         // the model remembers it already asked for a destination rather
@@ -92,6 +98,7 @@ isolated service class TripPlannerAgentService {
         string|error reply = tripPlanner.run(userText, sessionId = updater.getContextId());
 
         if reply is error {
+            log:printError("Trip Planner: task failed", taskId = taskId, reason = reply.message());
             string msg = string `trip planner model call failed: ${reply.message()}`;
             check updater->failed({
                 messageId: uuid:createType4AsString(),
@@ -102,7 +109,9 @@ isolated service class TripPlannerAgentService {
         }
 
         string trimmed = reply.trim();
+        log:printInfo("Trip Planner: Claude replied", taskId = taskId, reply = trimmed);
         if trimmed.startsWith("NEEDS_INFO:") {
+            log:printInfo("Trip Planner: task needs input (INPUT_REQUIRED)", taskId = taskId);
             check updater->requireInput({
                 messageId: uuid:createType4AsString(),
                 role: a2a:ROLE_AGENT,
@@ -119,6 +128,7 @@ isolated service class TripPlannerAgentService {
             : trimmed;
         check updater->addArtifact([{text: itinerary}]);
         check updater->complete();
+        log:printInfo("Trip Planner: task completed (COMPLETED)", taskId = taskId);
         return;
     }
 }

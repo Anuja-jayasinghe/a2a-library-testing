@@ -7,6 +7,7 @@
 import ballerina/a2a;
 import ballerina/ai;
 import ballerina/io;
+import ballerina/log;
 import ballerina/uuid;
 import ballerinax/ai.anthropic;
 
@@ -73,9 +74,15 @@ isolated service class PackingAssistantAgentService {
         check updater->working();
 
         string userText = extractText(context.message);
+        string taskId = updater.getTaskId();
+        boolean isContinuation = context.message.taskId is string;
+        log:printInfo("Packing Assistant: task received", taskId = taskId, contextId = updater.getContextId(),
+                continuation = isContinuation, request = userText);
+        log:printInfo("Packing Assistant: asking Claude", taskId = taskId);
         string|error reply = packingAssistant.run(userText, sessionId = updater.getContextId());
 
         if reply is error {
+            log:printError("Packing Assistant: task failed", taskId = taskId, reason = reply.message());
             string msg = string `packing assistant model call failed: ${reply.message()}`;
             check updater->failed({
                 messageId: uuid:createType4AsString(),
@@ -86,7 +93,9 @@ isolated service class PackingAssistantAgentService {
         }
 
         string trimmed = reply.trim();
+        log:printInfo("Packing Assistant: Claude replied", taskId = taskId, reply = trimmed);
         if trimmed.startsWith("NEEDS_INFO:") {
+            log:printInfo("Packing Assistant: task needs input (INPUT_REQUIRED)", taskId = taskId);
             check updater->requireInput({
                 messageId: uuid:createType4AsString(),
                 role: a2a:ROLE_AGENT,
@@ -100,6 +109,7 @@ isolated service class PackingAssistantAgentService {
             : trimmed;
         check updater->addArtifact([{text: packingList}]);
         check updater->complete();
+        log:printInfo("Packing Assistant: task completed (COMPLETED)", taskId = taskId);
         return;
     }
 }
