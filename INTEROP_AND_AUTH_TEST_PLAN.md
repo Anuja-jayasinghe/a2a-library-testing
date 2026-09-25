@@ -13,6 +13,28 @@ checkouts on this machine; anything marked **(verify)** is an assumption to conf
 
 ---
 
+## Status (2026-09-25): what is built, so what the tests will exercise
+
+Implemented in `module-ballerina-a2a` on `feat/http-json-listener` (403 unit/integration tests pass; TCK default
+mode unchanged at 88 passed / 4 failed):
+
+| Built | Commit | Plan cases it makes testable |
+|---|---|---|
+| `ListenerConfiguration.auth` (JWT, OAuth2 introspection, file/LDAP Basic), identity-scoped tasks | `a53cdb5` | S-A1..S-A7, S-A10, S-A12, S-A13 |
+| Extended card without `auth` refuses to start | `f88a341` | S-A11 |
+| `securitySchemes` served in the v1.0 wrapped shape (was flat: a strict v1 client rejected the card) | `8288592` | I1 (card discovery); confirmed by parsing the served card with the Python SDK 1.1.5 protobuf types |
+| Card `securitySchemes`/`securityRequirements` derived from `auth` | `caf9afc` | S-A8 (advertised = enforced, by construction), C-A1, C-A5, C-A7 |
+| `AuthenticationError` / `AuthorizationError` on the client, server binding | `56cf5f2` | C-A2..C-A4, C-A8, C-A9 |
+
+Still open: **S-A14** (API-key check on the server, nothing built), **S-A15** (mutual TLS needs the HTTPS follow-up),
+OAuth2 authorization-code / device-code flows and OIDC discovery on the client, refresh-and-retry on 401, and LDAP
+(no test server). **Part 1 (interop) has not started.**
+
+Known consequence: the TCK's *extended* mode cannot run against a conformant listener (the TCK sends no
+credentials, spec 13.3 requires them). It is blocked by design, not failing.
+
+---
+
 ## What we know (evidence)
 
 | Fact | Where it came from |
