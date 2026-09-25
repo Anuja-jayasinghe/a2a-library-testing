@@ -8,8 +8,8 @@ Two gaps left after the TCK run and the long-running checks:
 2. **Authentication.** The listener has no inbound authentication, the extended agent card is served to
    anyone, and no real request has ever been answered with 401/403.
 
-Nothing in this plan has been run yet. Facts below were read from the code and the checkouts on this
-machine; anything marked **(verify)** is an assumption to confirm in Phase 0, not a finding.
+Only the auth spike (section 2.1) has been run. Facts below were read from the code, the live spec and the
+checkouts on this machine; anything marked **(verify)** is an assumption to confirm in Phase 0, not a finding.
 
 ---
 
@@ -20,6 +20,10 @@ machine; anything marked **(verify)** is an assumption to confirm in Phase 0, no
 | The listener returns the extended card to any caller; `ownerResolver` only scopes tasks to an identity someone else supplies | `module-ballerina-a2a/ballerina/default_handler.bal` `getExtendedAgentCard`, `owner_resolver.bal` |
 | The client builds credential headers from the card's `securitySchemes`; covered by unit tests only | `auth.bal`, `tests/auth_test.bal` |
 | Listener passes every non-A2A field of `ListenerConfiguration` to `http:Listener` | `listener.bal` `httpListenerConfigurationOf` |
+| The spec makes this a conformance gap, not a design choice: 7.4 "MUST authenticate every incoming request"; 13.3 "`GetExtendedAgentCard` MUST require authentication"; 13.1 task operations MUST be scoped to the authenticated caller; 5.x "MUST NOT reveal the existence of resources the client is not authorized to access" | live spec `docs/specification.md`, read 2026-09-25 |
+| `http:ListenerConfiguration` (http 2.17.2) has **no `interceptors` field**, and the dispatcher is a plain `*http:Service`, so a user cannot put authentication "in front of" `a2a:Listener` through its config | `http_service_endpoint.bal` in the http bala |
+| `@http:ServiceConfig{auth}` is a compile-time annotation on a service; our dispatcher is a library-owned service class, so users cannot annotate it | `auth_desugar.bal` |
+| The listener auth handlers are public and reusable: `ListenerJwtAuthHandler`, `ListenerOAuth2Handler`, `ListenerFileUserStoreBasicAuthHandler`, `ListenerLdapUserStoreBasicAuthHandler`; `http:ListenerAuthConfig` is a public type. The helper that picks a handler by scheme (`tryAuthenticate`) is private | http bala source |
 | Python SDK **1.1.5** on PyPI has a REST client transport, REST server routes, an extended-card route, a client `AuthInterceptor`/`CredentialService`, and a server `owner_resolver` | wheel contents inspected |
 | Java SDK checkout is `v1.2.0.Final` + 44 commits (`1.2.1.Final-SNAPSHOT`); it has `reference/rest`, a `helloworld` example, and an `itk/` interop kit whose scenarios include `http_json` star topologies across SDKs | `~/gitProject/a2a-java` |
 | `a2a-samples` Python agents pin `a2a-sdk>=0.3.0`, so some may speak the older protocol | `pyproject.toml` files. **Do not use the samples as-is**: use them for ideas only |
@@ -109,25 +113,65 @@ listener in as another "sdk" and get a second opinion for free. If not, skip: ou
 
 ## Part 2: Authentication and the extended agent card
 
-### 2.1 Decision first (this shapes the tests)
+### 2.1 Reuse Ballerina's auth libraries; design and spike result
 
-Today the card can advertise `Bearer required` while the listener accepts anonymous calls. Options:
+**Mapping of A2A's five scheme kinds to what `ballerina/http`, `ballerina/oauth2`, `ballerina/jwt` and
+`ballerina/auth` already provide** (the linked Ballerina auth spec covers Basic Auth only; OAuth2 and JWT
+are their own modules):
 
-| Option | What it means | Cost |
+| A2A scheme | Client | Server |
 |---|---|---|
-| **A. Auth lives in the HTTP layer** (recommended, pending Phase 0) | Document that authentication is done by an interceptor / listener auth in front of the A2A service; `ownerResolver` reads the identity it established | Smallest; matches how the Python SDK (`a2a/auth/user.py`, `owner_resolver`) and the Java sample (`magic_8_ball_security`) appear to work **(verify by reading both)** |
-| B. First-class hook | New optional `ListenerConfiguration` field, e.g. an authenticator returning an identity, gating every route and the extended card | New public API; more to test and keep stable at 0.1.0 |
-| C. Enforce `securityRequirements` automatically | Server reads its own card and rejects unmet requirements | Needs a real credential validator per scheme type; largest |
+| HTTP Basic | `http:CredentialsConfig` | file-store / LDAP listener handlers |
+| HTTP Bearer | `http:BearerTokenConfig`, or `JwtIssuerConfig` | `ListenerJwtAuthHandler` (`jwt:validate`: shared secret, cert, trust store, JWKS URL) |
+| OAuth2 | `http:OAuth2ClientCredentialsGrantConfig`, `PasswordGrantConfig`, `RefreshTokenGrantConfig`, `JwtBearerGrantConfig` | `ListenerOAuth2Handler` (introspection), or the JWT handler for JWT access tokens |
+| OpenID Connect | OAuth2 grants once the token endpoint is known; no `openIdConnectUrl` discovery seen in these modules **(verify)** | JWT handler against the issuer's JWKS |
+| Mutual TLS | `secureSocket` | `ListenerSecureSocket.mutualSsl` |
+| API key | ours today (`CredentialProvider`) | **nothing built in: a small check of ours** |
 
-Phase 0 must answer, with evidence:
-- Can an `http:RequestInterceptor` (or listener `auth`) be attached through `ListenerConfiguration`
-  today? Since the config is now passed through, it may already work **(verify)**.
+Not covered by the grant configs: authorization-code and device-code OAuth2 flows (interactive login).
+The client can still start from a refresh token it already holds.
+
+**Proposed design (needs the user's decision).** New optional
+`ListenerConfiguration.auth: http:ListenerAuthConfig[]?`, the same shape developers already write in
+`@http:ServiceConfig`. Checked in the dispatcher before `ownerResolver` and before any operation:
+
+- the public card stays open;
+- missing or invalid credentials -> 401 with a `WWW-Authenticate` challenge; insufficient scope -> 403;
+- if an extended card is configured and `auth` is not, the listener **fails at startup** (spec 13.3);
+- the authenticated subject feeds task scoping, so 13.1 needs no hand-written resolver;
+- optional: derive the card's `securitySchemes` from `auth`, so "advertised" and "enforced" cannot drift
+  (this makes S-A8 true by construction).
+
+Alternatives considered: (A) "auth in front of the listener" is **not available** through `a2a:Listener`
+today (no interceptors, see evidence). (C) parsing the card's own `securityRequirements` to enforce
+automatically needs a validator per scheme anyway; the `auth` field is that, made explicit.
+
+**Spike result (2026-09-25, throwaway package, not committed to any library).** A `*http:Service` service
+class shaped like our dispatcher, with one catch-all resource taking `http:Request` and using
+`ListenerJwtAuthHandler` (HS256 shared secret), behaved as designed:
+
+| Case | Result |
+|---|---|
+| public card, no credentials | 200 |
+| extended card, no credentials / garbage token / wrong secret | 401 with `WWW-Authenticate` |
+| extended card, valid token | 200, subject `alice` available |
+| listener requiring scope `a2a:write`, token with only `a2a:read` | 403 |
+| same, token with `a2a:write` | 200 |
+| expired token | 401 |
+
+Two implementation notes from it:
+1. `authenticate` returns `jwt:Payload|http:Unauthorized`, and `Payload` is an open record, so `is Unauthorized`
+   does **not** narrow the union; an explicit cast is needed after the check.
+2. With no `Authorization` header the handler still logs an ERROR ("Authorization header not available").
+   The real implementation should test for the header first and skip the handler when it is absent.
+
+The spike did not cover OAuth2 introspection, file/LDAP Basic, SSE requests, or the wiring into
+`ownerResolver`; those remain Phase 0 items.
+
+Phase 0 must still answer, with evidence:
 - What do Python and Java do for the extended card? Is it gated, and by what?
-- What does the spec (live) say the response is for a missing vs wrong credential (401 vs 403), and does
-  it say the extended card must be gated?
-
-Then the user picks A/B/C. If A, Part 2 is tests plus a README section. If B or C, it is a design
-change first, and the tests below become its acceptance tests.
+- What does the live spec say the 401/403 body should look like for the HTTP+JSON binding?
+- Can the authenticated subject reach `ownerResolver` cleanly, or does the resolver contract change?
 
 ### 2.2 Server-side tests (our listener)
 
@@ -147,6 +191,11 @@ card configured.
 | S-A8 | Card says `securityRequirements`, server enforces nothing | **Consistency check**: the test fails when advertised != enforced. Encodes the gap we found |
 | S-A9 | Extended card configured but `capabilities.extendedAgentCard` false (and the reverse) | typed errors per spec, not a 500 |
 | S-A10 | Error body for 401/403 | `google.rpc.Status` shape the client can decode, or plain HTTP error; note which |
+| S-A11 | Extended card configured, no `auth` configured | listener refuses to start (spec 13.3) |
+| S-A12 | JWT with a `scope` claim below the configured scopes | 403; the message does not name resources |
+| S-A13 | Streaming (`message:stream`, `subscribe`) with no / invalid credentials | rejected as a plain 401 *before* the SSE stream opens, not as an SSE error event |
+| S-A14 | API-key scheme (header) declared on the card | enforced by the small custom check; missing or wrong key -> 401 |
+| S-A15 | Mutual TLS (`mutualSsl`, `verifyClient = REQUIRE`) | call without a client certificate fails at the TLS layer (needs the HTTPS follow-up) |
 
 ### 2.3 Client-side tests (`a2a:HttpClient`)
 
@@ -187,7 +236,7 @@ static bearer token, **(verify)** the cleanest way in SDK 1.1.5).
 
 | Phase | Work | Done when |
 |---|---|---|
-| 0 | Spikes: install `a2a-sdk==1.1.5`; build Java `helloworld`; confirm both speak HTTP+JSON v1; confirm interceptor passthrough on our listener; read how Python and Java gate the extended card; confirm the live spec's 401/403 text | Every **(verify)** above is resolved or struck. **Decision A/B/C is put to the user** |
+| 0 | Spikes: install `a2a-sdk==1.1.5`; build Java `helloworld`; confirm both speak HTTP+JSON v1; read how Python and Java gate the extended card; extend the JWT spike to OAuth2 introspection, file-store Basic and an SSE request; confirm the live spec's 401/403 text | Every **(verify)** above is resolved or struck. **The `auth` field design (2.1) is put to the user** |
 | 1 | Port the `tck-sut` contract to Python and Java agents; get I1-I3 green on the control pair | Control pair passes I1-I3 |
 | 2 | Pairs A and C with I1-I12 (Python), then B and D (Java) | `RESULTS.md` has a full grid with a failure classification per cell |
 | 3 | I13 (70 s silent stream) and I14-I15 on every pair | Grid complete |
