@@ -135,6 +135,19 @@ was run four times; this is evidence, not statistics.**
 To do the last two, the demo gained two optional settings (default behaviour unchanged): `server` `authSecret`
 (JWT-protect the listener) and `client` `tripPlannerSecret` (the credential given to the toolkit).
 
+## Typed errors, extensions, negotiation and reconnection, against real servers (`interop/run_more_checks.sh`)
+
+| Check | Result |
+|---|---|
+| `VersionNotSupportedError` decoded from a **real** `VERSION_NOT_SUPPORTED` (client sends `A2A-Version: 2.0`) | PASS against both the Python and the Java reference servers |
+| `UnsupportedOperationError` raised by a real server: `sendStreamingMessage` and `subscribeToTask` against a server that withholds streaming | PASS (the client was made to believe streaming existed, so the *server* is what refused) |
+| Subscribing to an already-finished task on the Python server | PASS as a client check (decoded faithfully); **the server deviates from the spec**, Finding 13 |
+| `A2A-Extensions` header: two requested extensions arrive intact at a real server; none requested -> none arrive | PASS |
+| An extension the Java server does not know | PASS: ignored, no error |
+| Java server rejects `application/a2a+json` (415): first call falls back, later calls keep working | PASS |
+| A *required* extension, from the real Python client: refused without it (its own `ExtensionSupportRequiredError`), accepted with it | PASS |
+| Opt-in stream reconnection: a proxy cuts the first stream after 3s of a ~6s task | PASS: `maxReconnectAttempts = 0` does not reach `COMPLETED`; with `2` the client resubscribes and does |
+
 ## Findings
 
 **1. (Python SDK ergonomics, not a bug) The agent must enqueue the initial `Task` itself.**
@@ -285,6 +298,25 @@ because this client's content-type fallback retried with `application/json`. The
 reaching the Java reference implementation, not a legacy leftover. (The live spec's own media type is
 `application/a2a+json`; this is the Java server disagreeing with it.)
 
+**13. (Deviation by the Python reference server) Subscribing to a finished task is `400 INVALID_PARAMS`.**
+Spec 3.1.6 lists `UnsupportedOperationError` for "the operation is attempted on a task that is in a terminal
+state". `a2a-sdk` 1.1.5's REST server answers `400`, reason `INVALID_PARAMS`, message "Task ... is in terminal
+state: 3". This library's `Listener` follows the spec (`UnsupportedOperationError`), and this client decodes what
+each server actually sends. Worth reporting upstream.
+
+**14. (Reference servers agree with each other and with this library, except on the content-type status.)**
+Both real servers answer `400 VERSION_NOT_SUPPORTED` for `A2A-Version: 2.0`, for `0.3`, and for an absent header,
+matching this listener. Neither rejects an unknown `A2A-Extensions` URI. For a wrong `Content-Type`, Java answers
+**415** with reason `CONTENT_TYPE_NOT_SUPPORTED` (the live spec's table says 400; the TCK also expects 415), while
+Python accepts `text/plain` outright. The client decodes by reason, so both decode correctly.
+
+**15. (Test-rig lessons, each of which had produced a *vacuous* pass)** A proxy meant to cut a stream cut nothing, and
+the "reconnection works" run passed anyway: (a) the client reuses one keep-alive connection for the card `GET` and the
+stream `POST`, so inspecting only a connection's first request missed the `POST`; (b) the agent's card advertises its
+own address, so the client bypassed the proxy after fetching the card; (c) under HTTP/2 the request line is not
+visible to a byte-level proxy. The `attempts = 0` run *failed its own check* and exposed it. The runner now also
+verifies that the proxy really cut the stream, so a result that did not exercise the fault cannot pass silently.
+
 ## What this covers, and what it doesn't
 
 - Confirms the highest-value slice of Part 1: card discovery, blocking send with an
@@ -293,9 +325,7 @@ reaching the Java reference implementation, not a legacy leftover. (The live spe
   stand-in). This is the first evidence of that kind for this library.
 - Still not covered: `ListTasks` `historyLength`/`statusTimestampAfter`; the Java side of streaming/push/multi-turn
   (pair D exercised only card discovery and one streaming send; pair B only `sendMessage`/`getTask` because the
-  hello-world agent has no tasks); a 70s+ silent stream against a foreign parser; `A2A-Extensions`; the remaining
-  typed errors (`UnsupportedOperation`, `ContentTypeNotSupported`, `VersionNotSupported`, `ExtensionSupportRequired`);
-  stream reconnection; a real identity provider (Keycloak/Auth0) rather than the local issuer; authorization-code
+  hello-world agent has no tasks); a 70s+ silent stream against a foreign parser; a real identity provider (Keycloak/Auth0) rather than the local issuer; authorization-code
   and OIDC-discovery flows; the in-task `AUTH_REQUIRED` flow; agent-to-agent identity propagation; **X-A4**
   (blocked); and (now that the key is back) LLM behaviour beyond the scenarios above: streaming/push tools driven by the model,
   larger models, and repeated runs of the non-regression scenarios.

@@ -68,7 +68,7 @@ EXTENDED_SKILL = AgentSkill(
 
 
 def build_card(port: int, extended: bool = False) -> AgentCard:
-    # INTEROP_NO_PUSH withholds push notifications, so the client's decoding of a
+    # INTEROP_NO_STREAMING / INTEROP_NO_PUSH withhold a capability, so the client's decoding of a
     # real server's "not supported" error can be checked against a genuine response.
     return AgentCard(
         name="Python A2A Interop Agent (extended)" if extended else "Python A2A Interop Agent",
@@ -78,7 +78,7 @@ def build_card(port: int, extended: bool = False) -> AgentCard:
         default_input_modes=["text"],
         default_output_modes=["text"],
         capabilities=AgentCapabilities(
-            streaming=True,
+            streaming=not os.environ.get("INTEROP_NO_STREAMING"),
             push_notifications=not os.environ.get("INTEROP_NO_PUSH"),
             extended_agent_card=True,
         ),
@@ -160,6 +160,23 @@ class InteropAgentExecutor(AgentExecutor):
         if message_id.startswith("interop-task-paced"):
             await asyncio.sleep(1.5)
             await updater.add_artifact([Part(text=f"echo: {text}")], name="result")
+            await updater.complete()
+            return
+
+        # A stream that keeps ticking for ~6s: long enough for a proxy to cut it mid-flight.
+        if message_id.startswith("interop-task-slowstream"):
+            await updater.start_work()
+            for i in range(1, 7):
+                await asyncio.sleep(1)
+                await updater.add_artifact([Part(text=f"tick-{i} ")], artifact_id="ticks", append=i > 1,
+                                           last_chunk=i == 6)
+            await updater.complete()
+            return
+
+        # A2A-Extensions: report exactly which extension URIs this server saw on the request.
+        if message_id.startswith("interop-echo-extensions"):
+            await updater.start_work()
+            await updater.add_artifact([Part(text=",".join(sorted(context.requested_extensions)))], name="extensions")
             await updater.complete()
             return
 

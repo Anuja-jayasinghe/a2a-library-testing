@@ -8,6 +8,9 @@ configurable int PORT = 9611;
 // make a real other-SDK SSE parser sit through several comment-only frames.
 configurable decimal KEEPALIVE_SECONDS = 15;
 configurable decimal PACE_SECONDS = 1.5;
+// Non-empty: the card declares this extension as REQUIRED, so a request that does not name it
+// in A2A-Extensions is refused with ExtensionSupportRequiredError (spec 3.3.4).
+configurable string REQUIRED_EXTENSION = "";
 
 isolated service class InteropAgent {
     *a2a:Service;
@@ -66,7 +69,7 @@ a2a:AgentCard card = {
     skills: [{id: "interop", name: "Interop", description: "Handles deterministic interop test messages", tags: ["interop"]}],
     defaultInputModes: ["text"],
     defaultOutputModes: ["text"],
-    capabilities: {},
+    capabilities: REQUIRED_EXTENSION == "" ? {} : {extensions: [{uri: REQUIRED_EXTENSION, required: true}]},
     supportedInterfaces: []
 };
 

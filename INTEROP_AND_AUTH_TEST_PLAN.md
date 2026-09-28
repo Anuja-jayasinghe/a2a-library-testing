@@ -130,6 +130,14 @@ an LLM-backed agent through a two-turn task, two agents in one turn, honest repo
 longer than the toolkit's 20s wait, and authentication through the toolkit (no credential: the model reports the
 failure and does not fabricate; with a credential: works). See `interop/RESULTS.md`.
 
+### Update: the remaining typed errors, extensions, and reconnection
+
+`interop/run_more_checks.sh`. All pass: `VersionNotSupportedError` from both the Python and Java servers,
+`UnsupportedOperationError` raised by a real server, the `A2A-Extensions` header on the wire, a required extension
+from the real Python client, content-type negotiation against Java, and stream reconnection through a proxy that
+cuts the stream. Two reference-server deviations recorded (`interop/RESULTS.md` 13-14): the Python server answers
+`INVALID_PARAMS` (not `UnsupportedOperationError`) for a finished task, and Java uses 415 for a bad content type.
+
 Also confirmed live: `a2a-java` has no released Maven Central artifacts (0 results for
 `org.a2aproject.sdk`); pair B/D needed a local build (`interop/run_pair_b_d.sh` documents the
 exact `mvn` invocation and the `http-client-vertx` test-jar pitfall to avoid).
