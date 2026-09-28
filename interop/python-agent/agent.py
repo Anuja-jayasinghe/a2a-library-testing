@@ -12,10 +12,12 @@ Serves the REST/HTTP+JSON binding only -- the same one ballerina/a2a speaks
 rolled: this is a real interop counterpart, not a stand-in.
 """
 
+import asyncio
 import os
 import sys
 import time
 
+import httpx
 import jwt as pyjwt
 import uvicorn
 from fastapi import FastAPI, Request
@@ -30,6 +32,10 @@ from a2a.server.request_handlers.default_request_handler_v2 import (
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.fastapi_routes import add_a2a_routes_to_fastapi
 from a2a.server.routes.rest_routes import create_rest_routes
+from a2a.server.tasks.base_push_notification_sender import BasePushNotificationSender
+from a2a.server.tasks.inmemory_push_notification_config_store import (
+    InMemoryPushNotificationConfigStore,
+)
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types import (
@@ -61,7 +67,7 @@ def build_card(port: int) -> AgentCard:
         skills=[TCK_SKILL],
         default_input_modes=["text"],
         default_output_modes=["text"],
-        capabilities=AgentCapabilities(streaming=True, push_notifications=False),
+        capabilities=AgentCapabilities(streaming=True, push_notifications=True),
         supported_interfaces=[
             AgentInterface(
                 url=f"http://localhost:{port}",
@@ -135,6 +141,14 @@ class InteropAgentExecutor(AgentExecutor):
             )
             return
 
+        # I4/I9/I13: stays WORKING for a short, real delay before completing --
+        # long enough to poll or subscribe mid-flight, short enough for a test.
+        if message_id.startswith("interop-task-paced"):
+            await asyncio.sleep(1.5)
+            await updater.add_artifact([Part(text=f"echo: {text}")], name="result")
+            await updater.complete()
+            return
+
         # A failure, cleanly reported.
         if message_id.startswith("interop-task-fail"):
             await updater.start_work()
@@ -199,10 +213,14 @@ def build_app(port: int) -> FastAPI:
         card.security_schemes["bearerAuth"].http_auth_security_scheme.scheme = "Bearer"
         card.security_schemes["bearerAuth"].http_auth_security_scheme.bearer_format = "JWT"
         card.security_requirements.add().schemes["bearerAuth"].list.extend([])
+    push_config_store = InMemoryPushNotificationConfigStore()
+    push_sender = BasePushNotificationSender(httpx.AsyncClient(), push_config_store)
     handler = DefaultRequestHandlerV2(
         agent_executor=InteropAgentExecutor(),
         task_store=InMemoryTaskStore(),
         agent_card=card,
+        push_config_store=push_config_store,
+        push_sender=push_sender,
     )
     app = FastAPI()
     if os.environ.get("INTEROP_REQUIRE_AUTH"):

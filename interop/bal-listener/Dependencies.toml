@@ -204,6 +204,9 @@ version = "0.0.0"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"}
 ]
+modules = [
+	{org = "ballerina", packageName = "lang.runtime", moduleName = "lang.runtime"}
+]
 
 [[package]]
 org = "ballerina"
@@ -326,7 +329,8 @@ name = "bal_listener"
 version = "0.1.0"
 dependencies = [
 	{org = "ballerina", name = "a2a"},
-	{org = "ballerina", name = "io"}
+	{org = "ballerina", name = "io"},
+	{org = "ballerina", name = "lang.runtime"}
 ]
 modules = [
 	{org = "interop", packageName = "bal_listener", moduleName = "bal_listener"}

@@ -67,6 +67,28 @@ Starlette middleware and declares the matching `securitySchemes` on its card.
 | No credential configured | PASS -- `AuthenticationError` |
 | Credential resolved by scheme name from the card alone | PASS -- task completes |
 
+## Remaining Part 1 scenarios, both directions (`interop/run_extended.sh`)
+
+| Scenario | A: our client -> real Python agent | C: real Python client -> our listener |
+|---|---|---|
+| I4 `returnImmediately` + poll | PASS | PASS |
+| I5 `ListTasks` (`pageSize`) | PASS | PASS |
+| I9 subscribe to a running task | PASS | PASS |
+| I10 multi-turn continuation (same task id) | PASS | PASS |
+| I12 push notification delivered as `{"task": ...}` | PASS | PASS |
+| I13 keep-alive comment frames tolerated by a real SSE parser | n/a (our own parser skips them) | PASS (4s silence, 0.5s keep-alive) |
+| I14 tenancy: unknown tenant prefix | Python agent accepts it (no validation) | **FAIL -- our listener answers 500** (Finding 7) |
+| I15 malformed body is a 4xx | PASS (400) | PASS (400) |
+
+## Auth grid, Java side
+
+| Case | Result |
+|---|---|
+| X-A2: real `a2a-java` client, its own `AuthInterceptor`, valid token -> our listener | PASS |
+| X-A2: no credential in the store | PASS -- rejected |
+| X-A2: forged signature | PASS -- rejected |
+| X-A4: our client -> a Java agent requiring auth | **NOT RUN, blocked**: the only Java security example (`a2a-samples/.../magic_8_ball_security`) needs Keycloak (Docker Dev Services) and an LLM API key; the `helloworld` server has no security extension. Needs either a Docker-capable environment or a hand-built Quarkus security config. |
+
 ## Findings
 
 **1. (Python SDK ergonomics, not a bug) The agent must enqueue the initial `Task` itself.**
@@ -130,16 +152,48 @@ event throws in a way its own high-level API treats as failure. Nothing on our s
 error for the request. Recorded as a finding about the reference client, not something to fix
 in `ballerina/a2a`.
 
+**7. (Real bug in `ballerina/a2a`) Client routing mistakes are reported as server errors.**
+Found by I14, confirmed against the source (`dispatcher.bal`, `stripTenant` and the fall-through):
+
+| Request to our listener | Status | Reason |
+|---|---|---|
+| `GET /acme-corp/tasks` (a tenant the card does not declare) | **500** | `INVALID_AGENT_RESPONSE` |
+| `GET /nope` (a path that is no A2A operation at all) | **500** | `INTERNAL_ERROR` |
+
+Both are the *caller's* mistake, yet they come back as 5xx. That is wrong on the facts (the server
+did nothing wrong), and it has practical cost: clients and gateways treat 5xx as retryable and page
+on it. `INVALID_AGENT_RESPONSE` is documented in `server_errors.bal` as "the agent's own response was
+the problem, not the client's request" -- exactly what this is not. The Python agent accepts any
+tenant prefix; Quarkus and FastAPI answer 404 for an unknown path. Suggested fix: 404 for an unknown
+route and for an unserved tenant (the spec has no error type for either; `google.rpc` `NOT_FOUND`).
+Not yet changed -- it is a public behaviour change and wants a decision.
+
+**8. (Positive) A third implementation parses our card's security declaration.** The real
+`a2a-java` client read the derived `securitySchemes` (`[bearerAuth]`) off our listener and its own
+`AuthInterceptor` attached the token, alongside the Python SDK (Finding 4's counterpart). Together with
+the Python protobuf parser rejecting the old flat shape and accepting the new one, the wire fix in
+`module-ballerina-a2a` `8288592` now has two independent confirmations.
+
+**9. (Test-harness lessons, not library bugs -- each cost a wrong first result)**
+- `bal run` with a `main()` starts module-level listeners only *after* `main()` returns, so a receiver
+  declared in the same program is never reachable during the test (minimal repro: unreachable at t=1s,
+  reachable at t=7s after `main` ended). Push receivers now run as separate processes.
+- `message:stream` deliberately stays open on `INPUT_REQUIRED`/`AUTH_REQUIRED` (`sse.bal`, design 8.1);
+  a client that waits for EOF there hangs. Correct behaviour; harness must stop on the state.
+- A continuation's opening `Task` snapshot is still `INPUT_REQUIRED` -- it must not end the wait.
+- `returnImmediately` on a *streaming* send still delivers the whole stream to a caller who drains it;
+  to observe the task before it finishes, take only the first event.
+
 ## What this covers, and what it doesn't
 
 - Confirms the highest-value slice of Part 1: card discovery, blocking send with an
   artifact, task-not-found, task-not-cancelable, and raw bytes -- against a **real** SDK
   client and a **real** SDK server, both built on the actual `a2a-sdk` 1.1.5 API (not a
   stand-in). This is the first evidence of that kind for this library.
-- Not yet run: I4 (returnImmediately + poll), I5 (ListTasks filters), I9 (subscribe to an
-  already-running task specifically), I10 (multi-turn continuation), I12 (push
-  notifications), I13 (long silent stream / keep-alives), I14 (tenancy), I15
-  (malformed/wrong-media-type bodies), and X-A2/X-A4 (the Java side of the auth grid).
+- Still not covered: `ListTasks` filters beyond `pageSize` (`contextId`, `status`, `historyLength`,
+  `statusTimestampAfter`), the Java side of streaming/push/multi-turn (pair D exercised only
+  card discovery and one streaming send), a long (70s+) silent stream (I13 was run at 4s), wrong
+  media type on a request (I15 covered only a malformed body), and **X-A4** (blocked, see above).
 - `python-agent/agent.py` covers a subset of the `tck-sut` contract (echo, completed+artifact,
   input-required, fail, immediate-complete, cancelable, raw bytes) -- enough for this pass,
   not the full grid yet.

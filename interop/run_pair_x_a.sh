@@ -38,6 +38,24 @@ echo "########## X-A1: real a2a-sdk client's AuthInterceptor -> ballerina/a2a li
 "$PY" "$HERE/python-client/driver_auth.py" "http://localhost:$BAL_AUTH_LISTENER_PORT"
 
 echo
+echo "########## X-A2: real a2a-java client's AuthInterceptor -> ballerina/a2a listener ##########"
+# Needs a2a-java built once (see run_pair_b_d.sh's header) and java-client-auth/AuthClient.java compiled:
+#   javac -cp "$(cat /tmp/interop_java_client_cp.txt)" -d /tmp/authclient_out java-client-auth/AuthClient.java
+A2A_JAVA_DIR=${A2A_JAVA_DIR:-$HOME/gitProject/a2a-java}
+if [ -f /tmp/interop_java_client_cp.txt ]; then
+  mkdir -p /tmp/authclient_out
+  javac -cp "$(cat /tmp/interop_java_client_cp.txt)" -d /tmp/authclient_out "$HERE/java-client-auth/AuthClient.java"
+  mint() { "$PY" -c "import jwt,time,sys;print(jwt.encode({'iss':'interop','aud':'a2a','sub':'alice','exp':int(time.time())+300},sys.argv[1],algorithm='HS256'))" "$1"; }
+  for spec in "valid token|$(mint interop-auth-shared-secret-0123456789)" "no credential|" "forged signature|$(mint a-different-secret-entirely-0123456)"; do
+    echo "-- ${spec%%|*}"; java -cp "$(cat /tmp/interop_java_client_cp.txt):/tmp/authclient_out" AuthClient "http://localhost:$BAL_AUTH_LISTENER_PORT" "${spec#*|}" 2>&1 | grep -v SLF4J | tail -1
+  done
+else
+  echo "(skipped: run run_pair_b_d.sh once first, so the Java client classpath exists)"
+fi
+# X-A4 (our client -> a Java agent requiring auth) is NOT run: the only Java security example
+# (a2a-samples magic_8_ball_security) needs Keycloak via Docker plus an LLM API key.
+
+echo
 echo "== starting the real a2a-sdk agent, requiring a bearer credential, on $PY_AUTH_AGENT_PORT =="
 (INTEROP_REQUIRE_AUTH=1 "$PY" "$HERE/python-agent/agent.py" "$PY_AUTH_AGENT_PORT" > /tmp/interop_py_auth_agent.log 2>&1 &)
 for _ in $(seq 1 40); do curl -sf "http://localhost:$PY_AUTH_AGENT_PORT/.well-known/agent-card.json" > /dev/null && break; sleep 0.5; done

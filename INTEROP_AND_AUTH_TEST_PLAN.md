@@ -88,6 +88,26 @@ a second real reference implementation to find. **This is a decision for the use
 as a documented workaround, or have `ballerina/a2a`'s `HttpClient` default to HTTP/1.1 itself,
 since h2c cleartext is a niche server-side opt-in almost nothing enables by default.
 
+### Update: the remaining Part 1 scenarios (I4, I5, I9, I10, I12, I13, I14, I15) and X-A2
+
+Run in both directions against real SDK code (`interop/run_extended.sh`); the Java side of the
+auth grid (X-A2) run with the real `a2a-java` `AuthInterceptor`. Everything passes except one
+scenario, which is the most useful result of the pass:
+
+- **I14 (tenancy) found a real bug in `ballerina/a2a`.** An unknown tenant prefix, and any path
+  that is not an A2A operation, come back as **HTTP 500** (`INVALID_AGENT_RESPONSE` /
+  `INTERNAL_ERROR`) although both are the caller's mistake. Details and the suggested 404 fix in
+  `interop/RESULTS.md` Finding 7. Not yet changed: it is a public behaviour change.
+- **I13** (the plan's flagged "(verify)": do other SDKs' SSE parsers tolerate comment-only
+  keep-alive frames?) -- yes, the real Python SDK sat through 4s of silence with 0.5s keep-alives.
+- **X-A2** passes (valid token accepted; no credential and forged signature rejected), and the Java
+  client parsing our derived `securitySchemes` is a third-implementation confirmation of the wire fix.
+- **X-A4 is blocked, not skipped**: the only Java security example needs Keycloak in Docker and an
+  LLM API key.
+
+Still open: `ListTasks` filters beyond `pageSize`; the Java side of streaming/push/multi-turn;
+a 70s+ silent stream against a foreign parser; wrong-media-type requests; X-A4.
+
 Also confirmed live: `a2a-java` has no released Maven Central artifacts (0 results for
 `org.a2aproject.sdk`); pair B/D needed a local build (`interop/run_pair_b_d.sh` documents the
 exact `mvn` invocation and the `http-client-vertx` test-jar pitfall to avoid).
