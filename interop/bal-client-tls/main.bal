@@ -45,12 +45,15 @@ public function main() returns error? {
         expect("a client can be built from the https URL", false, viaUrl.message());
     }
     if card is a2a:AgentCard {
-        // Workaround: correct the scheme ourselves, proving the TLS transport itself is fine.
-        card.supportedInterfaces[0].url = tls;
-        a2a:HttpClient fixed = check new (card, clientConfig = trusting());
-        a2a:Task|a2a:Message|a2a:Error r = send(fixed);
-        expect("with the URL corrected by hand, TLS works end to end", r is a2a:Task, r is a2a:Error ? r.message() : "");
+        expect("the advertised URL is the address the listener really answers on", card.supportedInterfaces[0].url == tls,
+                card.supportedInterfaces[0].url);
     }
+
+    io:println("== publicUrl: a TLS listener that tells clients to use a proxy's address (9616) ==");
+    a2a:AgentCard|a2a:Error proxied = a2a:resolveAgentCard("https://localhost:9616", clientConfig = trusting());
+    expect("the configured public URL is served, whatever address the request arrived on", proxied is a2a:AgentCard
+            && proxied.supportedInterfaces[0].url == "https://agents.example.com/travel",
+            proxied is a2a:Error ? proxied.message() : proxied.supportedInterfaces[0].url);
 
     io:println("== TLS: the CA is NOT trusted ==");
     a2a:AgentCard|a2a:Error untrusted = a2a:resolveAgentCard(tls);

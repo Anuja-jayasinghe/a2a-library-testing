@@ -118,8 +118,8 @@ a 70s+ silent stream against a foreign parser; wrong-media-type requests; X-A4.
 client-credentials + JWKS flow works from both this client and the real Python client (acquire, cache, expiry,
 scope, key rotation); TLS and mutual TLS work. Three findings, detailed in `interop/RESULTS.md` 10-12:
 
-- **Panic on a bad OAuth2 client secret / unreachable issuer** escapes `a2a:HttpClient`'s typed-error contract.
-- **A TLS `Listener` advertises `http://`** in its card, so clients cannot use it without a manual fix (spec 7.1).
+- **Panic on a bad OAuth2 client secret / unreachable issuer** escapes `a2a:HttpClient`'s typed-error contract. *Fixed, `9a90e33`.*
+- **A TLS `Listener` advertises `http://`** in its card, so clients cannot use it without a manual fix (spec 7.1). *Fixed, `94b0212`, with a new `publicUrl` setting.*
 - **The Java reference server rejects `application/a2a+json` (415)**; our fallback is what made pair B pass.
 
 ### Update: LLM-backed agents (API key restored)
@@ -162,10 +162,22 @@ Findings 16-20 in `interop/RESULTS.md`; the three that need a decision:
 - **The IdP's JWKS is fetched on every request** by default, and `jwksConfig.cacheConfig` is filled once at startup
   and never refilled (17) -- worth a README note at minimum, and an upstream `ballerina/jwt` issue.
 - **An IdP that is down at startup panics out of `a2a:Listener`'s init** when a JWKS cache is configured (18), the same
-  class as the OAuth2 panic; one `trap` at the library boundary fixes both.
+  class as the OAuth2 panic. *Fixed, `760d53f`* (a typed error naming the entry); see the next update.
 - **No delegation**: an agent cannot act as its caller when calling another agent (19); a design decision, not a defect.
 
 Still open: `ListTasks` filters beyond `pageSize`; Java streaming/push/multi-turn; a 70s+ silent stream; X-A4; other IdPs.
+
+### Update: the three defects fixed, and re-verified
+
+`module-ballerina-a2a` `9a90e33` (OAuth2 token failure -> typed error), `760d53f` (listener auth entry failure -> typed
+error naming the entry), `94b0212` (https card URL for a TLS listener, plus `ListenerConfiguration.publicUrl`), `527b331`
+(docs, including the JWKS-fetching note). Suite: 423 passing, 0 failing; each new test was shown to fail without its fix
+(the TLS one with the exact interop symptom, "Remote host closed the connection"). Against real servers after
+republishing: `run_client_checks.sh` 44 pass, 0 fail (the two OAuth2 contract checks that failed before now pass; the TLS
+rig passes without the by-hand URL correction and gains a `publicUrl` case); `run_idp_checks.sh` 59 pass, 0 fail, with
+J4 asserting the typed startup error; TCK default mode unchanged at 88 passed / 4 failed (the same four known
+failures). Not run: TCK `extended` mode, which cannot start because a listener with an extended card now requires `auth`
+(spec 13.3, the earlier change).
 
 ## What we know (evidence)
 

@@ -281,6 +281,7 @@ documents a typed `Error?` and whose README says no operation returns a bare err
 `ballerina/oauth2`, but this library can contain it (`trap` around the `http:Client` creation in `HttpClient.init` and
 in card resolution). Practically: a mistyped client secret or an issuer outage at start-up crashes the caller instead
 of being handled. Token *refresh* failures later are returned errors, not panics.
+**Fixed** in `module-ballerina-a2a` `9a90e33`: both places that build an `http:Client` from the caller's configuration go through a trapped constructor, and the caller gets an `InternalError` naming the agent URL and carrying the token endpoint's message. `bal-client-oidc`'s two contract checks (refused secret, unreachable endpoint) now pass. A `bal build` of a rig reports UP-TO-DATE when only the *local dependency* changed, so a rig must have its `target/` removed to see a republished library.
 
 **11. (Defect, breaks HTTPS) A `Listener` served over TLS advertises an `http://` interface URL.**
 `dispatcher.bal:173` builds the URL as `http://${Host}`, so a listener configured with `secureSocket` hands out a card
@@ -290,6 +291,7 @@ transport is fine. Spec 7.1 says production deployments MUST use HTTPS. The same
 TLS-terminating proxy (the `Host` header and scheme are the internal ones), and there is no way to configure the
 public URL. Proposed: derive `https` when `secureSocket` is configured, plus an explicit public-URL setting for
 proxies and pre-built `http:Listener`s.
+**Fixed** in `module-ballerina-a2a` `94b0212`: the scheme comes from the HTTP listener itself (`getConfig().secureSocket`), so it is right for a port and for a listener passed in, and `ListenerConfiguration.publicUrl` is served verbatim for proxies and gateways (validated; `X-Forwarded-*` deliberately ignored). The TLS rig now passes without the by-hand URL correction, and a `publicUrl` listener (9616) serves the configured address.
 
 **12. (Context that changes how to read earlier results) The current Java reference server rejects
 `application/a2a+json` with 415.** Checked directly against the freshly built `a2a-java` server: `POST /message:send`
@@ -348,6 +350,7 @@ JWKS cache is configured.** `ballerina/jwt` does `panic` when it cannot preload 
 process exits 1. `Listener.init` documents typed errors for bad `auth` config; this one is not returned. Together
 with finding 10 (OAuth2 token failure at `HttpClient` construction) the pattern is: any `ballerina/http`/`jwt`/`oauth2`
 handler whose constructor can panic needs a `trap` at the library boundary. The fix is small and local.
+**Fixed** in `module-ballerina-a2a` `760d53f`: each handler is built under `trap`, and `Listener.init` returns an `InternalError` naming the entry (`ListenerConfiguration.auth[0] (jwtValidatorConfig) could not be initialised: ...`), before the HTTP listener is created. `driver_jwks.py` J4 now asserts this instead of recording the panic. The same applies to an unreachable LDAP server. Not changed, because it is upstream: `ballerina/jwt`'s cache is filled only at startup (17), documented in the README (`527b331`).
 
 **19. (Gap, not a spec violation) There is no way for an agent to act *as the caller* when it calls another agent.**
 Chain user -> A -> B: A sees the user (`context.owner` is the user's `sub`); B sees **A's own service identity**, not the

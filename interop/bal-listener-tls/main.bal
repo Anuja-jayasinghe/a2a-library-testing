@@ -9,6 +9,8 @@ import ballerina/io;
 configurable int PORT = 9614;
 configurable string certDir = "/tmp/interop-certs";
 configurable boolean mutualTls = false;
+// Non-empty: what a TLS-terminating proxy would tell clients to use (ListenerConfiguration.publicUrl).
+configurable string PUBLIC_URL = "";
 
 isolated service class InteropAgent {
     *a2a:Service;
@@ -36,7 +38,8 @@ http:ListenerSecureSocket tlsConfig = mutualTls
        mutualSsl: {verifyClient: http:REQUIRE, cert: certDir + "/ca.pem"}}
     : {key: {certFile: certDir + "/server.pem", keyFile: certDir + "/server.p8.key"}};
 
-listener a2a:Listener l = new (PORT, agentCard = card, secureSocket = tlsConfig);
+listener a2a:Listener l = new (PORT, agentCard = card, secureSocket = tlsConfig,
+    publicUrl = PUBLIC_URL == "" ? () : PUBLIC_URL);
 
 public function main() returns error? {
     check l.attach(new InteropAgent());

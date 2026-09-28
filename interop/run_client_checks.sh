@@ -9,7 +9,7 @@
 # bal-client processes get a watchdog rather than being trusted to exit.
 HERE=$(cd "$(dirname "$0")" && pwd); PY="$HERE/python-agent/.venv/bin/python"
 kill_ports() { for p in "$@"; do lsof -ti :"$p" -sTCP:LISTEN 2>/dev/null | xargs -r kill 2>/dev/null; done; }
-PORTS="9700 9702 9703 9800 9613 9614 9615"; trap "kill_ports $PORTS" EXIT; kill_ports $PORTS; sleep 1
+PORTS="9700 9702 9703 9800 9613 9614 9615 9616"; trap "kill_ports $PORTS" EXIT; kill_ports $PORTS; sleep 1
 up() { for _ in $(seq 1 90); do curl -sfk "$1" >/dev/null 2>&1 && return 0; sleep 1; done; echo "not up: $1"; }
 run() { (cd "$1" && java -jar "target/bin/$2.jar") & P=$!; for _ in $(seq 1 90); do kill -0 $P 2>/dev/null || break; sleep 1; done; kill -9 $P 2>/dev/null; }
 for d in bal-client-ops bal-client-oidc bal-client-tls bal-listener-oidc bal-listener-tls; do (cd "$HERE/$d" && bal build >/dev/null 2>&1); done
@@ -32,8 +32,13 @@ kill_ports 9800 9613
 
 echo; echo "########## 3. TLS and mutual TLS ##########"
 bash "$HERE/make_certs.sh" >/dev/null
-(cd "$HERE/bal-listener-tls" && bal run >/tmp/tls_listener.log 2>&1 &)
-(cd "$HERE/bal-listener-tls" && bal run -- -CPORT=9615 -CmutualTls=true >/tmp/mtls_listener.log 2>&1 &)
+# From the built jar, one process each: three `bal run`s in one directory race to rewrite target/.
+TLS_JAR="$HERE/bal-listener-tls/target/bin/bal_listener_tls.jar"
+(java -jar "$TLS_JAR" >/tmp/tls_listener.log 2>&1 &)
+(BAL_CONFIG_VAR_PORT=9615 BAL_CONFIG_VAR_MUTUALTLS=true java -jar "$TLS_JAR" >/tmp/mtls_listener.log 2>&1 &)
+(BAL_CONFIG_VAR_PORT=9616 BAL_CONFIG_VAR_PUBLIC_URL=https://agents.example.com/travel/ java -jar "$TLS_JAR" >/tmp/pub_listener.log 2>&1 &)
+up https://localhost:9614/.well-known/agent-card.json
+up https://localhost:9616/.well-known/agent-card.json
 up https://localhost:9614/.well-known/agent-card.json
 for _ in $(seq 1 60); do curl -sf --cacert /tmp/interop-certs/ca.pem --cert /tmp/interop-certs/client.pem --key /tmp/interop-certs/client.key https://localhost:9615/.well-known/agent-card.json >/dev/null && break; sleep 1; done
 run "$HERE/bal-client-tls" bal_client_tls

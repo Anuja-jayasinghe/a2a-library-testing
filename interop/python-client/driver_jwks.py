@@ -4,7 +4,7 @@ operational side of "validate against the issuer's published keys":
   J1  without a cache: how often is the IdP asked for its keys?
   J2  the IdP becomes unreachable while the agent is running: what does a caller with a valid token see?
   J3  with jwksConfig.cacheConfig: fetch count, key rotation, key withdrawal, IdP outage
-  J4  with a cache and the IdP unreachable at startup
+  J4  with a cache and the IdP unreachable at startup: a typed error naming the entry, not a panic
 
 Lines starting KNOWN describe behaviour observed and recorded in RESULTS.md; they do not fail the run.
 Needs Keycloak on 8180, bal-listener-idp built (bal-listener-idp/target/bin/bal_listener_idp.jar).
@@ -153,15 +153,14 @@ try:
     print("== J4: cache enabled, IdP unreachable at startup ==")
     l3, up = start_listener(9624, "/tmp/jwks_l3.log", cacheJwks="true")   # proxy is down
     time.sleep(3)
-    alive = l3.poll() is None
     log = open("/tmp/jwks_l3.log").read()
-    first = next((ln for ln in log.splitlines() if ln.strip()), "")
-    escapes = "ballerina.a2a.0.Listener:init" in log
-    known("startup with a JWKS cache while the IdP is down",
-          ("process still running, listener up=" + str(up)) if alive else
-          f"process exited with code {l3.returncode}; the error is not returned by a2a:Listener's init, it "
-          + ("escapes as an uncaught panic through it" if escapes else "ends the process") + f" ({first[:80]})")
     stop(l3)
+    check("the listener does not come up, and does not pretend to", not up)
+    check("startup fails with the typed error naming the auth entry",
+          "ListenerConfiguration.auth[0] (jwtValidatorConfig) could not be initialised" in log,
+          next((ln for ln in log.splitlines() if ln.strip()), "")[:160])
+    check("it is a returned error, not an uncaught panic through a2a:Listener's init",
+          "ballerina.a2a.0.Listener:init" not in log)
 finally:
     for p in list(procs):
         stop(p)
