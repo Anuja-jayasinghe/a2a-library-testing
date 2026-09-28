@@ -59,6 +59,40 @@ now have a real cross-SDK result for card discovery, a blocking send with an art
 `TaskNotFoundError`, and `TaskNotCancelableError`. Streaming, push, multi-turn, tenancy, the
 auth grid, and pair B/D (Java) are still open -- see `interop/RESULTS.md`'s last section.
 
+### Update: pairs B/D (Java) and the cross-SDK auth grid (X-A1, X-A3), also real, also run
+
+Extended the same real-SDK-on-both-sides approach to the Java reference implementation and
+to authentication. Full detail and the exact commands are in `interop/RESULTS.md`; headline
+results:
+
+- **Pair B** (our client -> the real `a2a-java` reference server, the `examples/helloworld`
+  Quarkus app run with `-Dquarkus.agentcard.protocol=HTTP+JSON`): PASS, after a real finding
+  -- see below.
+- **Pair D** (the real `a2a-java` reference client -> our listener): the task completed
+  correctly server-side (confirmed via `GET /tasks`), but the reference client's own SSE
+  handling throws after the terminal event (`Stream 1 cancelled`) -- their bug, evidenced by
+  checking our listener's own task store directly, not assumed.
+- **X-A1** (the real Python client's own `AuthInterceptor`/`CredentialService` -> our listener
+  with `auth`): PASS -- valid token accepted, missing/forged token rejected with 401.
+- **X-A3** (our client, `credentials = InMemoryCredentialStore` -> a real Python agent
+  requiring a bearer credential): PASS -- same three cases.
+
+**New finding (pair B): `ballerina/a2a`'s client cannot reach the real Java reference server
+with its own defaults.** `ballerina/http`'s `ClientConfiguration.httpVersion` defaults to
+`HTTP_2_0`, which over plain `http://` means HTTP/2 prior-knowledge (h2c). Quarkus/Vert.x's
+default listener does not support h2c and answers with a bare 400 *before the request reaches
+the A2A routing layer at all* (confirmed: zero server-side log entries for the rejected
+request). `httpVersion: http:HTTP_1_1` on the client's `clientConfig` fixes it completely.
+This did not surface against the Python agent (uvicorn tolerates the same default) -- it took
+a second real reference implementation to find. **This is a decision for the user**: leave it
+as a documented workaround, or have `ballerina/a2a`'s `HttpClient` default to HTTP/1.1 itself,
+since h2c cleartext is a niche server-side opt-in almost nothing enables by default.
+
+Also confirmed live: `a2a-java` has no released Maven Central artifacts (0 results for
+`org.a2aproject.sdk`); pair B/D needed a local build (`interop/run_pair_b_d.sh` documents the
+exact `mvn` invocation and the `http-client-vertx` test-jar pitfall to avoid).
+
+
 Known consequence: the TCK's *extended* mode cannot run against a conformant listener (the TCK sends no
 credentials, spec 13.3 requires them). It is blocked by design, not failing.
 

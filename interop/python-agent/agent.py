@@ -12,10 +12,15 @@ Serves the REST/HTTP+JSON binding only -- the same one ballerina/a2a speaks
 rolled: this is a real interop counterpart, not a stand-in.
 """
 
+import os
 import sys
+import time
 
+import jwt as pyjwt
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events.event_queue_v2 import EventQueue
@@ -160,14 +165,48 @@ class InteropAgentExecutor(AgentExecutor):
         await updater.cancel()
 
 
+# X-A3 (INTEROP_AND_AUTH_TEST_PLAN.md): a shared secret this agent validates
+# a Bearer JWT against, when INTEROP_REQUIRE_AUTH is set. Not part of the SDK
+# -- a2a-sdk 1.1.5 has no built-in server-side auth of its own, so this is
+# the same "auth lives in front of the app" pattern ballerina/a2a's own
+# design considered and could have taken; a plain Starlette middleware,
+# nothing A2A-specific.
+INTEROP_AUTH_SECRET = "interop-auth-shared-secret-0123456789"
+
+
+class RequireBearerMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/.well-known/agent-card.json":
+            return await call_next(request)
+        header = request.headers.get("authorization", "")
+        if not header.lower().startswith("bearer "):
+            return JSONResponse({"error": "missing bearer credential"}, status_code=401,
+                                 headers={"WWW-Authenticate": "Bearer"})
+        token = header[len("bearer "):]
+        try:
+            pyjwt.decode(token, INTEROP_AUTH_SECRET, algorithms=["HS256"], audience="a2a", issuer="interop")
+        except pyjwt.PyJWTError as e:
+            return JSONResponse({"error": f"invalid credential: {e}"}, status_code=401,
+                                 headers={"WWW-Authenticate": "Bearer"})
+        return await call_next(request)
+
+
 def build_app(port: int) -> FastAPI:
     card = build_card(port)
+    if os.environ.get("INTEROP_REQUIRE_AUTH"):
+        card = card.__class__()
+        card.CopyFrom(build_card(port))
+        card.security_schemes["bearerAuth"].http_auth_security_scheme.scheme = "Bearer"
+        card.security_schemes["bearerAuth"].http_auth_security_scheme.bearer_format = "JWT"
+        card.security_requirements.add().schemes["bearerAuth"].list.extend([])
     handler = DefaultRequestHandlerV2(
         agent_executor=InteropAgentExecutor(),
         task_store=InMemoryTaskStore(),
         agent_card=card,
     )
     app = FastAPI()
+    if os.environ.get("INTEROP_REQUIRE_AUTH"):
+        app.add_middleware(RequireBearerMiddleware)
     add_a2a_routes_to_fastapi(
         app,
         agent_card_routes=create_agent_card_routes(card),

@@ -1,7 +1,7 @@
 import ballerina/a2a;
 import ballerina/io;
 
-const int PORT = 9611;
+configurable int PORT = 9611;
 
 isolated service class InteropAgent {
     *a2a:Service;
