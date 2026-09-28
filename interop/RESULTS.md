@@ -114,6 +114,27 @@ parts), and typed errors decoded from a **real server's** bodies (`PushNotificat
 **TLS / mutual TLS:** trusted CA works; untrusted certificate is a returned error; mutual TLS accepts a valid client
 certificate and refuses none, and a send over mutual TLS works. **But** Finding 11.
 
+## LLM-backed (Claude) checks (`interop/run_llm_checks.sh`, spends API tokens)
+
+Everything above used deterministic agents. With the API key restored, the same library was exercised with real
+Claude-backed agents (`ballerina/ai` `Agent`, Haiku 4.5): the Trip Planner and Packing Assistant as A2A servers,
+and the Traveler (an `ai:Agent` with `ai:A2aToolKit`) as the client. Assertions are on protocol behaviour (task
+counts, states, identity), never the model's wording. **Each scenario was run once, except the regression, which
+was run four times; this is evidence, not statistics.**
+
+| Check | Result |
+|---|---|
+| Real Python `a2a-sdk` client -> LLM-backed Trip Planner, two turns (no city -> `INPUT_REQUIRED`, then "Milan") | PASS: same task id, `COMPLETED`, itinerary mentions Milan, exactly 1 task on the server |
+| **The original Milan regression** through the Traveler chat (the toolkit continuation returned a stale `INPUT_REQUIRED`, the model retried, and duplicate tasks appeared) | **PASS, 4 of 4 runs: exactly 1 new task each, `COMPLETED`, no retry loop** |
+| Two agents in one turn (Trip Planner + Packing Assistant) | PASS: 1 new task on each |
+| Cancel a task that already finished, via the model | PASS: the `TaskNotCancelable` error reached the model, which reported "the cancellation did not work" and why, rather than claiming success |
+| A ~40s task: the toolkit waits at most 20s, so the model must follow up | PASS: completed at 52s, 1 task, model reported the final result |
+| Trip Planner behind a JWT, Traveler with **no** credential | PASS: an authentication error reached the model, which reported it and **did not invent an itinerary** |
+| Same, with the credential passed as the toolkit's `secret` | PASS: 1 task, itinerary returned; the token does not appear in the printed conversation (weak evidence: the model-facing tool traffic is not logged) |
+
+To do the last two, the demo gained two optional settings (default behaviour unchanged): `server` `authSecret`
+(JWT-protect the listener) and `client` `tripPlannerSecret` (the credential given to the toolkit).
+
 ## Findings
 
 **1. (Python SDK ergonomics, not a bug) The agent must enqueue the initial `Task` itself.**
@@ -276,7 +297,8 @@ reaching the Java reference implementation, not a legacy leftover. (The live spe
   typed errors (`UnsupportedOperation`, `ContentTypeNotSupported`, `VersionNotSupported`, `ExtensionSupportRequired`);
   stream reconnection; a real identity provider (Keycloak/Auth0) rather than the local issuer; authorization-code
   and OIDC-discovery flows; the in-task `AUTH_REQUIRED` flow; agent-to-agent identity propagation; **X-A4**
-  (blocked); and LLM-backed agents (API key limit).
+  (blocked); and (now that the key is back) LLM behaviour beyond the scenarios above: streaming/push tools driven by the model,
+  larger models, and repeated runs of the non-regression scenarios.
 - `python-agent/agent.py` covers a subset of the `tck-sut` contract (echo, completed+artifact,
   input-required, fail, immediate-complete, cancelable, raw bytes) -- enough for this pass,
   not the full grid yet.

@@ -18,6 +18,9 @@ import ballerina/uuid;
 import ballerinax/ai.anthropic;
 
 configurable int agentPort = 9095;
+// Optional: when set, every request except the public card must carry a Bearer JWT signed with
+// this shared secret (issuer "interop", audience "a2a"). Empty means no authentication.
+configurable string authSecret = "";
 configurable string anthropicApiKey = ?;
 
 final anthropic:ModelProvider claudeModel = check new (anthropicApiKey, anthropic:CLAUDE_HAIKU_4_5);
@@ -63,7 +66,9 @@ listener a2a:Listener demoAgentListener = new (agentPort, agentCard = {
     // pushNotificationsCapability to withhold either deliberately.
     capabilities: {},
     supportedInterfaces: []
-}, pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
+}, pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}),
+    auth = authSecret == "" ? () : [{jwtValidatorConfig: {issuer: "interop", audience: "a2a",
+        signatureConfig: {secret: authSecret}}}]);
 // validateUrl: false is because this demo's client-side webhook receiver
 // runs at http://localhost -- a loopback address the default SSRF guard
 // (specification section 13.2) otherwise rejects before ever connecting.

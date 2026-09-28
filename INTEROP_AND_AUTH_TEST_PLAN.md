@@ -122,6 +122,14 @@ scope, key rotation); TLS and mutual TLS work. Three findings, detailed in `inte
 - **A TLS `Listener` advertises `http://`** in its card, so clients cannot use it without a manual fix (spec 7.1).
 - **The Java reference server rejects `application/a2a+json` (415)**; our fallback is what made pair B pass.
 
+### Update: LLM-backed agents (API key restored)
+
+`interop/run_llm_checks.sh` (spends API tokens). The chat-level Milan regression, previously unverifiable, is
+**fixed: 4 of 4 runs produce exactly one task**. Also verified with real Claude agents: a real Python client driving
+an LLM-backed agent through a two-turn task, two agents in one turn, honest reporting of a failed cancel, a task
+longer than the toolkit's 20s wait, and authentication through the toolkit (no credential: the model reports the
+failure and does not fabricate; with a credential: works). See `interop/RESULTS.md`.
+
 Also confirmed live: `a2a-java` has no released Maven Central artifacts (0 results for
 `org.a2aproject.sdk`); pair B/D needed a local build (`interop/run_pair_b_d.sh` documents the
 exact `mvn` invocation and the `http-client-vertx` test-jar pitfall to avoid).

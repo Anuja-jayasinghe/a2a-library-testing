@@ -11,11 +11,15 @@ import ballerinax/ai.anthropic;
 configurable string anthropicApiKey = ?;
 configurable string tripPlannerUrl = "http://localhost:9095";
 configurable string packingAssistantUrl = "http://localhost:9097";
+// Optional credential for the Trip Planner (a JWT). The toolkit files it under whichever
+// security scheme the agent's card declares; the model never sees it.
+configurable string tripPlannerSecret = "";
 
 isolated function buildTraveler() returns ai:Agent|error {
     anthropic:ModelProvider claudeModel = check new (anthropicApiKey, anthropic:CLAUDE_HAIKU_4_5);
     ai:A2aToolKit a2a = check new (
-        agents = [{agent: tripPlannerUrl}, {agent: packingAssistantUrl}],
+        agents = [tripPlannerSecret == "" ? {agent: tripPlannerUrl} : {agent: tripPlannerUrl, secret: tripPlannerSecret},
+            {agent: packingAssistantUrl}],
         toolSet = {streaming: true, pushNotifications: true}
     );
     return new (
