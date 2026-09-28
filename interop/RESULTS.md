@@ -317,6 +317,54 @@ own address, so the client bypassed the proxy after fetching the card; (c) under
 visible to a byte-level proxy. The `attempts = 0` run *failed its own check* and exposed it. The runner now also
 verifies that the proxy really cut the stream, so a result that did not exercise the fault cannot pass silently.
 
+**16. (Real IdP, positive) Keycloak-issued credentials work end to end, and the listener refuses the two shapes
+that matter.** `interop/run_idp_checks.sh` runs against Keycloak 26 in Docker (`interop/keycloak/`). Service-account
+tokens and *user* tokens from a scripted authorization-code + PKCE login are admitted by the listener (issuer,
+audience `a2a`, scope `a2a:invoke`, RS256 via the realm's JWKS); a read-only scope is 403; a valid token for another
+audience is 401; **a token with a valid signature, audience and scope but no `sub` is 401** (admitting it would put
+every such caller in one shared owner scope). The agent's identity for a caller is the token's `sub`, so two users
+cannot read, list or cancel each other's tasks (TaskNotFound, no leak), including a task paused in `AUTH_REQUIRED`.
+The card's `openIdConnect` scheme and its scope requirement are parsed by the reference Python SDK and by this
+library's client, and the advertised discovery URL is a live OIDC document whose `issuer` matches the tokens accepted.
+The Ballerina client refreshes a user's access token with `ballerina/oauth2`'s refresh-token grant; an expired token
+alone is refused (401), so the refresh is what kept the calls working. *Rig lessons:* a Keycloak realm import that
+lists `clientScopes` silently drops the built-in `basic` scope, which is what supplies `sub`; and Keycloak marks its
+session cookies `Secure` on plain-HTTP localhost, which Python's cookie jar will not send back.
+
+**17. (Operational, `ballerina/jwt` behaviour reached through `a2a:Listener`) The IdP is asked for its keys on every
+request, and the cache does not do what it suggests.** `driver_jwks.py`, with a counting proxy in front of Keycloak:
+without `jwksConfig.cacheConfig` (the default), 20 authenticated requests cause **20 JWKS fetches**. With a cache,
+requests for keys present at startup cost none, but `ballerina/jwt` writes the cache **only once, at startup**
+(`preloadJwksToCache`); a key fetched after a miss is never stored. So a key rotated in later costs a fetch on every
+request from then on (10 requests -> 10 fetches), and once `defaultMaxAge` passes the whole cache is gone and never
+refilled (10 requests -> 10 fetches). Consequence for production: latency and load on the IdP per call, and while
+the IdP is unreachable a caller with a perfectly valid token gets **401** (which invites clients to discard and refresh
+a good credential), unless its key happens to still be in the startup cache. Key rotation itself is handled (a new
+`kid` is fetched on the miss) and a withdrawn key is refused once it is no longer cached.
+
+**18. (Defect, same class as finding 10) An IdP that is down at startup panics out of `a2a:Listener`'s init when a
+JWKS cache is configured.** `ballerina/jwt` does `panic` when it cannot preload the JWKS; the trace runs through
+`ballerina.a2a.0.Listener:init` (`listener.bal:215` -> `AuthEntry:init` -> `ListenerJwtAuthHandler:init`) and the
+process exits 1. `Listener.init` documents typed errors for bad `auth` config; this one is not returned. Together
+with finding 10 (OAuth2 token failure at `HttpClient` construction) the pattern is: any `ballerina/http`/`jwt`/`oauth2`
+handler whose constructor can panic needs a `trap` at the library boundary. The fix is small and local.
+
+**19. (Gap, not a spec violation) There is no way for an agent to act *as the caller* when it calls another agent.**
+Chain user -> A -> B: A sees the user (`context.owner` is the user's `sub`); B sees **A's own service identity**, not the
+user. `RequestContext` carries only the derived `owner` string, not the token or its claims, so a handler cannot
+forward the caller's credential or perform an RFC 8693 token exchange; the only options are calling as a service or
+hand-carrying the identity in the message, which B cannot verify. The spec does not define delegation, so this is a
+capability gap for multi-agent deployments rather than a defect. Recorded here so the decision (expose the verified
+claims/token on `RequestContext`, or document the service-identity model) is made deliberately.
+
+**20. (Positive) In-task `AUTH_REQUIRED` (spec 7.6) works in both directions.** Our listener pauses a task in
+`AUTH_REQUIRED` with a status message; the real Python client sees it (blocking `GetTask` reports it, the credential
+sent on the same task id completes it, another user cannot continue it, and it can be canceled). The reverse holds:
+this client surfaces a Python-SDK agent's `AUTH_REQUIRED` as a `Task` in that state, decodes its status message,
+continues it, cancels a paused one, and also receives the transition as an event on the streaming operation.
+*Harness note:* `a2a-sdk`'s `TaskNotFoundError` is not an `A2AClientError`; a driver that catches only the latter
+misses it.
+
 ## What this covers, and what it doesn't
 
 - Confirms the highest-value slice of Part 1: card discovery, blocking send with an
@@ -325,10 +373,11 @@ verifies that the proxy really cut the stream, so a result that did not exercise
   stand-in). This is the first evidence of that kind for this library.
 - Still not covered: `ListTasks` `historyLength`/`statusTimestampAfter`; the Java side of streaming/push/multi-turn
   (pair D exercised only card discovery and one streaming send; pair B only `sendMessage`/`getTask` because the
-  hello-world agent has no tasks); a 70s+ silent stream against a foreign parser; a real identity provider (Keycloak/Auth0) rather than the local issuer; authorization-code
-  and OIDC-discovery flows; the in-task `AUTH_REQUIRED` flow; agent-to-agent identity propagation; **X-A4**
-  (blocked); and (now that the key is back) LLM behaviour beyond the scenarios above: streaming/push tools driven by the model,
-  larger models, and repeated runs of the non-regression scenarios.
+  hello-world agent has no tasks); a 70s+ silent stream against a foreign parser; other identity providers (Auth0,
+  Entra) and their quirks; the interactive authorization-code redirect handled *by this library* (the client only
+  consumes the resulting refresh token; there is no code-flow support to test); token exchange / delegation (finding
+  19); **X-A4** (blocked: the Java security sample needs an LLM key as well as Keycloak); API-key server auth (not built);
+  and LLM behaviour beyond the scenarios above: streaming/push tools driven by the model, larger models, repeated runs.
 - `python-agent/agent.py` covers a subset of the `tck-sut` contract (echo, completed+artifact,
   input-required, fail, immediate-complete, cancelable, raw bytes) -- enough for this pass,
   not the full grid yet.

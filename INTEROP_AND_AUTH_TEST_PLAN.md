@@ -148,6 +148,25 @@ credentials, spec 13.3 requires them). It is blocked by design, not failing.
 
 ---
 
+### Update: a real identity provider and in-task AUTH_REQUIRED
+
+`interop/run_idp_checks.sh` (needs Docker; starts Keycloak 26 with `interop/keycloak/realm-a2a.json`). 56 checks pass
+in three drivers, from a clean start. The real Python SDK and this library's client both authenticate with credentials
+**acquired from a real IdP**: service accounts (client credentials), and users through a scripted authorization-code +
+PKCE login whose refresh token the Ballerina client then keeps alive. The listener validates against the realm's JWKS,
+enforces scope (403) and audience (401), refuses a valid token that carries no `sub`, and scopes tasks to the user
+(no cross-user read, list, cancel or continue). Key rotation and withdrawal, the card's `openIdConnect` scheme and its
+discovery URL, and in-task `AUTH_REQUIRED` in both directions (including cancel and the streaming event) all pass.
+Findings 16-20 in `interop/RESULTS.md`; the three that need a decision:
+
+- **The IdP's JWKS is fetched on every request** by default, and `jwksConfig.cacheConfig` is filled once at startup
+  and never refilled (17) -- worth a README note at minimum, and an upstream `ballerina/jwt` issue.
+- **An IdP that is down at startup panics out of `a2a:Listener`'s init** when a JWKS cache is configured (18), the same
+  class as the OAuth2 panic; one `trap` at the library boundary fixes both.
+- **No delegation**: an agent cannot act as its caller when calling another agent (19); a design decision, not a defect.
+
+Still open: `ListTasks` filters beyond `pageSize`; Java streaming/push/multi-turn; a 70s+ silent stream; X-A4; other IdPs.
+
 ## What we know (evidence)
 
 | Fact | Where it came from |
@@ -356,7 +375,7 @@ static bearer token, **(verify)** the cleanest way in SDK 1.1.5).
 | X-A1 | Python client with its `AuthInterceptor` + `CredentialService` -> our listener with Bearer. Authenticated calls succeed, unauthenticated are rejected |
 | X-A2 | Java client (its auth interceptor **(verify)**) -> our listener |
 | X-A3 | Our client -> Python agent with Bearer (this is C-A1 against a foreign server) |
-| X-A4 | Our client -> Java agent with a security sample, if one speaks v1 over HTTP+JSON **(verify)** |
+| X-A4 | Our client -> Java agent with a security sample, if one speaks v1 over HTTP+JSON **(verify)** -- blocked (needs Keycloak *and* an LLM key); the same Keycloak flow is proven against the Python agent instead (`run_idp_checks.sh`) |
 
 ### 2.5 Out of scope here (noted so it is not forgotten)
 

@@ -6,3 +6,4 @@ interop/*/target/
 tck-sut/target/
 tck-sut/reports/
 interop/*/target/
+interop/keycloak/__pycache__/

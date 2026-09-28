@@ -147,6 +147,15 @@ class InteropAgentExecutor(AgentExecutor):
             await updater.start_work()
             return
 
+        # Spec 7.6: pause in AUTH_REQUIRED. A follow-up message on the same task (any other
+        # prefix) falls through to the default branch below and completes it.
+        if message_id.startswith("interop-task-auth-required"):
+            await updater.start_work()
+            await updater.requires_auth(
+                updater.new_agent_message([Part(text="link your calendar account, then reply with the credential")])
+            )
+            return
+
         # I10 (half): pause for more input.
         if message_id.startswith("interop-task-input-required"):
             await updater.start_work()
@@ -231,6 +240,14 @@ class InteropAgentExecutor(AgentExecutor):
 INTEROP_AUTH_SECRET = "interop-auth-shared-secret-0123456789"
 
 
+# INTEROP_JWKS_URL (+ INTEROP_ISSUER): validate RS256 tokens against an identity provider's published
+# keys, the way a production agent behind Keycloak/Auth0/Entra does, and demand the a2a:invoke scope
+# (403, not 401, when the token is valid but lacks it).
+INTEROP_JWKS_URL = os.environ.get("INTEROP_JWKS_URL")
+INTEROP_ISSUER = os.environ.get("INTEROP_ISSUER", "")
+_jwks = pyjwt.PyJWKClient(INTEROP_JWKS_URL) if INTEROP_JWKS_URL else None
+
+
 class RequireBearerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.url.path == "/.well-known/agent-card.json":
@@ -241,7 +258,14 @@ class RequireBearerMiddleware(BaseHTTPMiddleware):
                                  headers={"WWW-Authenticate": "Bearer"})
         token = header[len("bearer "):]
         try:
-            pyjwt.decode(token, INTEROP_AUTH_SECRET, algorithms=["HS256"], audience="a2a", issuer="interop")
+            if _jwks is not None:
+                key = _jwks.get_signing_key_from_jwt(token).key
+                claims = pyjwt.decode(token, key, algorithms=["RS256"], audience="a2a", issuer=INTEROP_ISSUER)
+                if "a2a:invoke" not in claims.get("scope", "").split():
+                    return JSONResponse({"error": "insufficient scope"}, status_code=403,
+                                        headers={"WWW-Authenticate": 'Bearer error="insufficient_scope", scope="a2a:invoke"'})
+            else:
+                pyjwt.decode(token, INTEROP_AUTH_SECRET, algorithms=["HS256"], audience="a2a", issuer="interop")
         except pyjwt.PyJWTError as e:
             return JSONResponse({"error": f"invalid credential: {e}"}, status_code=401,
                                  headers={"WWW-Authenticate": "Bearer"})
@@ -253,9 +277,14 @@ def build_app(port: int) -> FastAPI:
     if os.environ.get("INTEROP_REQUIRE_AUTH"):
         card = card.__class__()
         card.CopyFrom(build_card(port))
-        card.security_schemes["bearerAuth"].http_auth_security_scheme.scheme = "Bearer"
-        card.security_schemes["bearerAuth"].http_auth_security_scheme.bearer_format = "JWT"
-        card.security_requirements.add().schemes["bearerAuth"].list.extend([])
+        if INTEROP_JWKS_URL:
+            card.security_schemes["oidc"].open_id_connect_security_scheme.open_id_connect_url = (
+                INTEROP_ISSUER + "/.well-known/openid-configuration")
+            card.security_requirements.add().schemes["oidc"].list.extend(["a2a:invoke"])
+        else:
+            card.security_schemes["bearerAuth"].http_auth_security_scheme.scheme = "Bearer"
+            card.security_schemes["bearerAuth"].http_auth_security_scheme.bearer_format = "JWT"
+            card.security_requirements.add().schemes["bearerAuth"].list.extend([])
     push_config_store = InMemoryPushNotificationConfigStore()
     push_sender = BasePushNotificationSender(httpx.AsyncClient(), push_config_store)
     handler = DefaultRequestHandlerV2(

@@ -1,0 +1,206 @@
+{
+  "realm": "a2a",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "clientScopes": [
+    {
+      "name": "basic",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a2a:invoke",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "a2a-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "a2a",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a2a:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "a2a-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "a2a",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "agent-a",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "agent-a-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [
+        "basic",
+        "a2a:invoke",
+        "a2a:read"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "agent-b",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "agent-b-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [
+        "basic",
+        "a2a:invoke",
+        "a2a:read"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "reader",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "reader-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [
+        "basic",
+        "a2a:read"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "no-audience",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "no-audience-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "a2a-webapp",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:9999/cb"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "6"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "a2a:invoke",
+        "a2a:read"
+      ],
+      "optionalClientScopes": [],
+      "secret": "webapp-secret"
+    },
+    {
+      "clientId": "a2a-webapp-nosub",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:9999/cb"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "6"
+      },
+      "defaultClientScopes": [
+        "a2a:invoke",
+        "a2a:read"
+      ],
+      "optionalClientScopes": [],
+      "secret": "nosub-secret"
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Tester",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alicepw",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@example.com",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Tester",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bobpw",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}
