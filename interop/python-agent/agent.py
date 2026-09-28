@@ -59,15 +59,29 @@ TCK_SKILL = AgentSkill(
 )
 
 
-def build_card(port: int) -> AgentCard:
+EXTENDED_SKILL = AgentSkill(
+    id="interop-extended",
+    name="Interop (extended)",
+    description="Only in the extended card",
+    tags=["interop"],
+)
+
+
+def build_card(port: int, extended: bool = False) -> AgentCard:
+    # INTEROP_NO_PUSH withholds push notifications, so the client's decoding of a
+    # real server's "not supported" error can be checked against a genuine response.
     return AgentCard(
-        name="Python A2A Interop Agent",
+        name="Python A2A Interop Agent (extended)" if extended else "Python A2A Interop Agent",
         description="Deterministic, non-LLM agent on a2a-sdk 1.1.5, for interop testing against ballerina/a2a",
         version="1.0.0",
-        skills=[TCK_SKILL],
+        skills=[TCK_SKILL, EXTENDED_SKILL] if extended else [TCK_SKILL],
         default_input_modes=["text"],
         default_output_modes=["text"],
-        capabilities=AgentCapabilities(streaming=True, push_notifications=True),
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=not os.environ.get("INTEROP_NO_PUSH"),
+            extended_agent_card=True,
+        ),
         supported_interfaces=[
             AgentInterface(
                 url=f"http://localhost:{port}",
@@ -149,6 +163,18 @@ class InteropAgentExecutor(AgentExecutor):
             await updater.complete()
             return
 
+        # One artifact delivered in three pieces (append / lastChunk). ballerina/a2a's
+        # own TaskUpdater cannot produce these, so this is the only way to see how
+        # its client handles a foreign server that streams an artifact in chunks.
+        if message_id.startswith("interop-task-chunked"):
+            await updater.start_work()
+            await updater.add_artifact([Part(text="one ")], artifact_id="chunked-1", name="chunked",
+                                       append=False, last_chunk=False)
+            await updater.add_artifact([Part(text="two ")], artifact_id="chunked-1", append=True, last_chunk=False)
+            await updater.add_artifact([Part(text="three")], artifact_id="chunked-1", append=True, last_chunk=True)
+            await updater.complete()
+            return
+
         # A failure, cleanly reported.
         if message_id.startswith("interop-task-fail"):
             await updater.start_work()
@@ -221,6 +247,9 @@ def build_app(port: int) -> FastAPI:
         agent_card=card,
         push_config_store=push_config_store,
         push_sender=push_sender,
+        # INTEROP_NO_EXTENDED_CARD: the card claims an extended card but none is
+        # configured -- a real server's ExtendedAgentCardNotConfiguredError.
+        extended_agent_card=None if os.environ.get("INTEROP_NO_EXTENDED_CARD") else build_card(port, extended=True),
     )
     app = FastAPI()
     if os.environ.get("INTEROP_REQUIRE_AUTH"):

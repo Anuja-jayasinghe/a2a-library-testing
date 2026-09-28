@@ -112,6 +112,16 @@ scenario, which is the most useful result of the pass:
 Still open: `ListTasks` filters beyond `pageSize`; the Java side of streaming/push/multi-turn;
 a 70s+ silent stream against a foreign parser; wrong-media-type requests; X-A4.
 
+### Update: client operations, a production-shaped token flow, and TLS
+
+`interop/run_client_checks.sh`. 21/21 client-operation checks pass against the real Python agent; the OAuth2
+client-credentials + JWKS flow works from both this client and the real Python client (acquire, cache, expiry,
+scope, key rotation); TLS and mutual TLS work. Three findings, detailed in `interop/RESULTS.md` 10-12:
+
+- **Panic on a bad OAuth2 client secret / unreachable issuer** escapes `a2a:HttpClient`'s typed-error contract.
+- **A TLS `Listener` advertises `http://`** in its card, so clients cannot use it without a manual fix (spec 7.1).
+- **The Java reference server rejects `application/a2a+json` (415)**; our fallback is what made pair B pass.
+
 Also confirmed live: `a2a-java` has no released Maven Central artifacts (0 results for
 `org.a2aproject.sdk`); pair B/D needed a local build (`interop/run_pair_b_d.sh` documents the
 exact `mvn` invocation and the `http-client-vertx` test-jar pitfall to avoid).

@@ -89,6 +89,31 @@ Starlette middleware and declares the matching `securitySchemes` on its card.
 | X-A2: forged signature | PASS -- rejected |
 | X-A4: our client -> a Java agent requiring auth | **NOT RUN, blocked**: the only Java security example (`a2a-samples/.../magic_8_ball_security`) needs Keycloak (Docker Dev Services) and an LLM API key; the `helloworld` server has no security extension. Needs either a Docker-capable environment or a hand-built Quarkus security config. |
 
+## Client operations, production-shaped auth, and TLS (`interop/run_client_checks.sh`)
+
+**Client operations vs the real Python agent: 21 of 21 pass.** Streaming send (initial Task, artifact, COMPLETED,
+stream ends), the four push-config operations (create keeps the caller's id, get, list, delete, get-after-delete is an
+error), cancelling a *running* task, `getExtendedAgentCard`, `listTasks` filters (`contextId`, `status`, `pageToken`,
+`includeArtifacts`), an artifact streamed in chunks (`append`/`lastChunk` decoded; a blocking send returns the merged
+parts), and typed errors decoded from a **real server's** bodies (`PushNotificationNotSupportedError`,
+`ExtendedAgentCardNotConfiguredError`).
+
+**OAuth2 client_credentials + JWKS, against a local issuer (`oidc-provider/`, RS256, 4s tokens):**
+
+| Case | This client | Real Python client |
+|---|---|---|
+| Token acquired from the issuer, validated by the listener via JWKS | PASS | PASS |
+| Cached token reused (no second token issued) | PASS | n/a |
+| Token expires; a fresh one is fetched; call still succeeds | PASS | n/a |
+| Same token replayed after expiry | n/a | PASS (401) |
+| `a2a:read`-only token vs a listener requiring `a2a:invoke` | PASS (`AuthorizationError`) | PASS (403) |
+| No credential / garbage token | PASS (`AuthenticationError`) | PASS (401) |
+| Issuer rotates its signing key; listener accepts a token signed with the new key | PASS | n/a |
+| Refused or unreachable token endpoint is a *returned* `a2a:Error` | **FAIL -- panic** (Finding 10) | n/a |
+
+**TLS / mutual TLS:** trusted CA works; untrusted certificate is a returned error; mutual TLS accepts a valid client
+certificate and refuses none, and a send over mutual TLS works. **But** Finding 11.
+
 ## Findings
 
 **1. (Python SDK ergonomics, not a bug) The agent must enqueue the initial `Task` itself.**
@@ -214,16 +239,44 @@ the Python protobuf parser rejecting the old flat shape and accepting the new on
 - `returnImmediately` on a *streaming* send still delivers the whole stream to a caller who drains it;
   to observe the task before it finishes, take only the first event.
 
+**10. (Defect, escapes `a2a:HttpClient`'s contract) A refused or unreachable OAuth2 token endpoint makes client
+construction *panic*.** `ballerina/oauth2` fetches the first token while the client is being built, and
+`ClientOAuth2Handler.init` has no error return, so a failure (wrong client secret, issuer down) is a panic, not a
+returned error. Isolated with `trap`: a plain `http:Client` panics too, and so does `a2a:HttpClient`, whose `init`
+documents a typed `Error?` and whose README says no operation returns a bare error. The cause is in `ballerina/http` +
+`ballerina/oauth2`, but this library can contain it (`trap` around the `http:Client` creation in `HttpClient.init` and
+in card resolution). Practically: a mistyped client secret or an issuer outage at start-up crashes the caller instead
+of being handled. Token *refresh* failures later are returned errors, not panics.
+
+**11. (Defect, breaks HTTPS) A `Listener` served over TLS advertises an `http://` interface URL.**
+`dispatcher.bal:173` builds the URL as `http://${Host}`, so a listener configured with `secureSocket` hands out a card
+pointing clients at plain HTTP on a TLS port. Impact, verified: a client built from `https://host` follows the card
+and fails ("Remote host closed the connection"); correcting the scheme by hand makes TLS work end to end, so the
+transport is fine. Spec 7.1 says production deployments MUST use HTTPS. The same code is also wrong behind a
+TLS-terminating proxy (the `Host` header and scheme are the internal ones), and there is no way to configure the
+public URL. Proposed: derive `https` when `secureSocket` is configured, plus an explicit public-URL setting for
+proxies and pre-built `http:Listener`s.
+
+**12. (Context that changes how to read earlier results) The current Java reference server rejects
+`application/a2a+json` with 415.** Checked directly against the freshly built `a2a-java` server: `POST /message:send`
+with `Content-Type: application/a2a+json` is **415**, with `application/json` it is **200**. So pair B passed only
+because this client's content-type fallback retried with `application/json`. The fallback is essential for
+reaching the Java reference implementation, not a legacy leftover. (The live spec's own media type is
+`application/a2a+json`; this is the Java server disagreeing with it.)
+
 ## What this covers, and what it doesn't
 
 - Confirms the highest-value slice of Part 1: card discovery, blocking send with an
   artifact, task-not-found, task-not-cancelable, and raw bytes -- against a **real** SDK
   client and a **real** SDK server, both built on the actual `a2a-sdk` 1.1.5 API (not a
   stand-in). This is the first evidence of that kind for this library.
-- Still not covered: `ListTasks` filters beyond `pageSize` (`contextId`, `status`, `historyLength`,
-  `statusTimestampAfter`), the Java side of streaming/push/multi-turn (pair D exercised only
-  card discovery and one streaming send), a long (70s+) silent stream (I13 was run at 4s), wrong
-  media type on a request (I15 covered only a malformed body), and **X-A4** (blocked, see above).
+- Still not covered: `ListTasks` `historyLength`/`statusTimestampAfter`; the Java side of streaming/push/multi-turn
+  (pair D exercised only card discovery and one streaming send; pair B only `sendMessage`/`getTask` because the
+  hello-world agent has no tasks); a 70s+ silent stream against a foreign parser; `A2A-Extensions`; the remaining
+  typed errors (`UnsupportedOperation`, `ContentTypeNotSupported`, `VersionNotSupported`, `ExtensionSupportRequired`);
+  stream reconnection; a real identity provider (Keycloak/Auth0) rather than the local issuer; authorization-code
+  and OIDC-discovery flows; the in-task `AUTH_REQUIRED` flow; agent-to-agent identity propagation; **X-A4**
+  (blocked); and LLM-backed agents (API key limit).
 - `python-agent/agent.py` covers a subset of the `tck-sut` contract (echo, completed+artifact,
   input-required, fail, immediate-complete, cancelable, raw bytes) -- enough for this pass,
   not the full grid yet.
