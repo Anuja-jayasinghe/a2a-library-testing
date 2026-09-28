@@ -100,7 +100,8 @@ scenario, which is the most useful result of the pass:
   it does define is that 5xx is for system failures and an agent's own malformed response, so the
   defect is the *category*, and either 400 or 404 would be within the spec. Details, the spec
   citations and the proposed statuses (404 unknown path, 400 unserved tenant) in
-  `interop/RESULTS.md` Finding 7. Not yet changed: it is a public behaviour change.
+  `interop/RESULTS.md` Finding 7. **Fixed** in `module-ballerina-a2a` `c37f89e` (404 unknown path, 400 unserved
+  tenant); I14 now passes against the real Python client.
 - **I13** (the plan's flagged "(verify)": do other SDKs' SSE parsers tolerate comment-only
   keep-alive frames?) -- yes, the real Python SDK sat through 4s of silence with 0.5s keep-alives.
 - **X-A2** passes (valid token accepted; no credential and forged signature rejected), and the Java

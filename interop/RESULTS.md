@@ -77,7 +77,7 @@ Starlette middleware and declares the matching `securitySchemes` on its card.
 | I10 multi-turn continuation (same task id) | PASS | PASS |
 | I12 push notification delivered as `{"task": ...}` | PASS | PASS |
 | I13 keep-alive comment frames tolerated by a real SSE parser | n/a (our own parser skips them) | PASS (4s silence, 0.5s keep-alive) |
-| I14 tenancy: unknown tenant prefix | Python agent accepts it (no validation) | **FAIL -- our listener answers 500** (Finding 7) |
+| I14 tenancy: unknown tenant prefix | Python agent accepts it (no validation) | PASS after fix (400; was 500, Finding 7) |
 | I15 malformed body is a 4xx | PASS (400) | PASS (400) |
 
 ## Auth grid, Java side
@@ -152,7 +152,7 @@ event throws in a way its own high-level API treats as failure. Nothing on our s
 error for the request. Recorded as a finding about the reference client, not something to fix
 in `ballerina/a2a`.
 
-**7. (Defect in `ballerina/a2a`: wrong status category) Caller mistakes are answered with 5xx.**
+**7. (FIXED in `module-ballerina-a2a` `c37f89e`) Caller mistakes were answered with 5xx.**
 Found by I14, confirmed against the source (`dispatcher.bal`, `stripTenant` and the fall-through):
 
 | Request to our listener | Status | Reason |
@@ -178,7 +178,25 @@ Python agent accepts any tenant prefix.
 
 Proposed: **404** for an unknown path (ordinary HTTP), **400** for an unserved tenant (the spec
 treats `tenant` as a request field, and 400 is its validation category). Both are design choices
-within what the spec allows. Not yet changed -- it is a public behaviour change.
+within what the spec allows.
+
+**Fixed** as proposed, following the library's existing `invalidRequest` pattern (an `InternalError`
+carrying a JSON-RPC code): unknown path -> 404 `METHOD_NOT_FOUND` (-32601, which the client already
+decodes, and which matches the Python SDK's REST client mapping a 404 to its `MethodNotFoundError`);
+unserved tenant -> 400 `INVALID_PARAMS` (-32602). Verified: 407 unit tests, which fail with either half of
+the fix reverted; TCK default mode unchanged (88 passed / 4 failed); the real Python client's
+`driver_extended.py` now passes I14 (`OVERALL: PASS`).
+
+Two things learned while fixing it:
+- The dispatcher already built `InternalError(code = 404)` for the unknown path; `errorBindingFor`
+  only read -32600/-32602, so the intent was silently dropped. The library's own comment called it a
+  "404-shaped InternalError".
+- A `Listener` **cannot serve a tenant at all**: `deriveServedCard` always replaces `supportedInterfaces`
+  with a single tenant-less entry, so `declaredTenant` is always `()` and every tenant-prefixed request is
+  refused. The `/{tenant}` bindings in the proto are therefore unreachable through the public API. That is a
+  separate, larger gap (server-side multi-tenancy), not addressed here.
+- Left as is: a *known* path with the wrong method (`POST /tasks/x`) is now 404 like any unmatched path;
+  405 would be more precise. Also `PUT` never reaches the dispatcher at all (the HTTP layer answers 405).
 
 **8. (Positive) A third implementation parses our card's security declaration.** The real
 `a2a-java` client read the derived `securitySchemes` (`[bearerAuth]`) off our listener and its own
