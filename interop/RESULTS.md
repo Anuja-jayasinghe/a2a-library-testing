@@ -152,7 +152,7 @@ event throws in a way its own high-level API treats as failure. Nothing on our s
 error for the request. Recorded as a finding about the reference client, not something to fix
 in `ballerina/a2a`.
 
-**7. (Real bug in `ballerina/a2a`) Client routing mistakes are reported as server errors.**
+**7. (Defect in `ballerina/a2a`: wrong status category) Caller mistakes are answered with 5xx.**
 Found by I14, confirmed against the source (`dispatcher.bal`, `stripTenant` and the fall-through):
 
 | Request to our listener | Status | Reason |
@@ -160,13 +160,25 @@ Found by I14, confirmed against the source (`dispatcher.bal`, `stripTenant` and 
 | `GET /acme-corp/tasks` (a tenant the card does not declare) | **500** | `INVALID_AGENT_RESPONSE` |
 | `GET /nope` (a path that is no A2A operation at all) | **500** | `INTERNAL_ERROR` |
 
-Both are the *caller's* mistake, yet they come back as 5xx. That is wrong on the facts (the server
-did nothing wrong), and it has practical cost: clients and gateways treat 5xx as retryable and page
-on it. `INVALID_AGENT_RESPONSE` is documented in `server_errors.bal` as "the agent's own response was
-the problem, not the client's request" -- exactly what this is not. The Python agent accepts any
-tenant prefix; Quarkus and FastAPI answer 404 for an unknown path. Suggested fix: 404 for an unknown
-route and for an unserved tenant (the spec has no error type for either; `google.rpc` `NOT_FOUND`).
-Not yet changed -- it is a public behaviour change and wants a decision.
+**What the spec says (live spec + `a2a.proto`, checked):** nothing about either case.
+- The only 404 rule is for *resources* (3.3.2 "Resource Errors": a task or config that does not
+  exist; 5.4 maps `TaskNotFoundError` to 404). Nothing addresses an unknown route.
+- The `/{tenant}` path prefix appears only as `additional_bindings` in the proto, never in the spec
+  prose. The only tenant rule is client-side (section 8.3: set `tenant` to the card's value).
+  What a server does with a different one is unspecified.
+- What the spec does define is the *category*: 5xx is for system failures (3.3.2 "System Errors")
+  and for `InvalidAgentResponseError` -- "an agent returned a response that does not conform"
+  (section 3.3.2 error list; 5.4 maps it to 500). A caller's own mistake is neither.
+  Validation Errors are 400 (3.3.2), and Resource Errors 404, so either 4xx is defensible.
+
+So the defect is that a caller's mistake is reported as a server fault, not that a specific status
+is missing. That has practical cost: clients and gateways treat 5xx as retryable and alert on it.
+Ecosystem reference points (not spec): Quarkus and FastAPI answer 404 for an unknown path; the
+Python agent accepts any tenant prefix.
+
+Proposed: **404** for an unknown path (ordinary HTTP), **400** for an unserved tenant (the spec
+treats `tenant` as a request field, and 400 is its validation category). Both are design choices
+within what the spec allows. Not yet changed -- it is a public behaviour change.
 
 **8. (Positive) A third implementation parses our card's security declaration.** The real
 `a2a-java` client read the derived `securitySchemes` (`[bearerAuth]`) off our listener and its own

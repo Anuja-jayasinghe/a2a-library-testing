@@ -94,9 +94,12 @@ Run in both directions against real SDK code (`interop/run_extended.sh`); the Ja
 auth grid (X-A2) run with the real `a2a-java` `AuthInterceptor`. Everything passes except one
 scenario, which is the most useful result of the pass:
 
-- **I14 (tenancy) found a real bug in `ballerina/a2a`.** An unknown tenant prefix, and any path
+- **I14 (tenancy) found a defect in `ballerina/a2a`.** An unknown tenant prefix, and any path
   that is not an A2A operation, come back as **HTTP 500** (`INVALID_AGENT_RESPONSE` /
-  `INTERNAL_ERROR`) although both are the caller's mistake. Details and the suggested 404 fix in
+  `INTERNAL_ERROR`) although both are the caller's mistake. The spec is silent on both cases; what
+  it does define is that 5xx is for system failures and an agent's own malformed response, so the
+  defect is the *category*, and either 400 or 404 would be within the spec. Details, the spec
+  citations and the proposed statuses (404 unknown path, 400 unserved tenant) in
   `interop/RESULTS.md` Finding 7. Not yet changed: it is a public behaviour change.
 - **I13** (the plan's flagged "(verify)": do other SDKs' SSE parsers tolerate comment-only
   keep-alive frames?) -- yes, the real Python SDK sat through 4s of silence with 0.5s keep-alives.
