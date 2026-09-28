@@ -1,3 +1,7 @@
-target/
-Config.toml
-.env
+interop/python-agent/.venv/
+interop/python-agent/__pycache__/
+interop/python-client/__pycache__/
+interop/*/target/
+*/target/
+tck-sut/target/
+tck-sut/reports/

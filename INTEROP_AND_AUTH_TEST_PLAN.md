@@ -30,6 +30,35 @@ Still open: **S-A14** (API-key check on the server, nothing built), **S-A15** (m
 OAuth2 authorization-code / device-code flows and OIDC discovery on the client, refresh-and-retry on 401, and LDAP
 (no test server). **Part 1 (interop) has not started.**
 
+### Binding coverage (found while starting Phase 0, confirmed by a real cross-SDK run)
+
+`ballerina/a2a` speaks **only the HTTP+JSON REST binding**, both as client and server. A2A
+also has JSON-RPC and gRPC bindings, and a lot of existing agents default to JSON-RPC --
+including `a2a-sdk` 1.1.5's own `ClientFactory`, whose `supported_protocol_bindings` defaults
+to `["jsonrpc"]` when left empty (`client/client_factory.py`). Confirmed live: the Python
+client driver below only reaches our listener once `supported_protocol_bindings=[HTTP_JSON]`
+is set explicitly.
+
+**Consequence:** "any other A2A-compatible language" is accurate only for "any implementation
+that also serves or calls the HTTP+JSON binding," not every A2A agent regardless of transport.
+Worth raising with the Ballerina team as a documented scope boundary, not an interop bug.
+
+### Phase 0/1 status (2026-09-28): first real cross-SDK run, both directions
+
+`interop/` now has a real `a2a-sdk` 1.1.5 agent (`python-agent/agent.py`, built on the SDK's
+own `DefaultRequestHandlerV2`/`AgentExecutor`/FastAPI routes -- not a stand-in) and a real
+`a2a-sdk` 1.1.5 client driver (`python-client/driver.py`, built on the SDK's own
+`ClientFactory`/`Client`), run against `bal-client/` and `bal-listener/`. `interop/run_pair_a_c.sh`
+runs both. Full results and four findings (one binding-coverage confirmation, two SDK
+ergonomics differences that needed fixing in the test code rather than the library, and one
+positive finding: our error reasons round-trip into the reference client's own typed
+exceptions) are in `interop/RESULTS.md`.
+
+This proves the TCK's httpx-based conformance checks were not the whole story: pairs A and C
+now have a real cross-SDK result for card discovery, a blocking send with an artifact,
+`TaskNotFoundError`, and `TaskNotCancelableError`. Streaming, push, multi-turn, tenancy, the
+auth grid, and pair B/D (Java) are still open -- see `interop/RESULTS.md`'s last section.
+
 Known consequence: the TCK's *extended* mode cannot run against a conformant listener (the TCK sends no
 credentials, spec 13.3 requires them). It is blocked by design, not failing.
 
