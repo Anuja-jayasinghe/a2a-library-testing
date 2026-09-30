@@ -26,6 +26,8 @@ configurable int webhookPort = 9198;
 // The HTTP client's own timeout in seconds (Ballerina's default is 30).
 configurable decimal clientTimeout = 30;
 configurable string taskId = "";
+// The name on the agent's card, which is what the toolkit's tools take as agentName.
+configurable string agentName = "Trip Planner Agent";
 
 final time:Utc startedAt = time:utcNow();
 
@@ -304,8 +306,8 @@ isolated function runToolkitContinue() returns error? {
     ai:ToolConfig[] tools = kit.getTools();
     foreach ai:ToolConfig t in tools {
         if t.name == "delegateToAgent" {
-            say(string `calling delegateToAgent(agentName, "Paris", taskId=${taskId}) on a task paused at INPUT_REQUIRED`);
-            any|error result = fn:call(t.caller, "Trip Planner Agent", "Paris", taskId);
+            say(string `calling delegateToAgent("${agentName}", "Paris", taskId=${taskId}) on a task paused at INPUT_REQUIRED`);
+            any|error result = fn:call(t.caller, agentName, "Paris", taskId);
             say("the model would receive: " + (result is error ? "ERROR " + result.message() : result.toString()));
             runtime:sleep(4);
             a2a:HttpClient c = check new (agentUrl);
