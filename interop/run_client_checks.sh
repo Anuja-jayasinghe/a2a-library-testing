@@ -7,7 +7,7 @@
 #      real Python client
 #   3. TLS and mutual TLS
 # bal-client processes get a watchdog rather than being trusted to exit.
-HERE=$(cd "$(dirname "$0")" && pwd); PY="$HERE/python-agent/.venv/bin/python"
+HERE=$(cd "$(dirname "$0")" && pwd); PY="${PY:-$HERE/python-agent/.venv/bin/python}"
 kill_ports() { for p in "$@"; do lsof -ti :"$p" -sTCP:LISTEN 2>/dev/null | xargs -r kill 2>/dev/null; done; }
 PORTS="9700 9702 9703 9800 9613 9614 9615 9616"; trap "kill_ports $PORTS" EXIT; kill_ports $PORTS; sleep 1
 up() { for _ in $(seq 1 90); do curl -sfk "$1" >/dev/null 2>&1 && return 0; sleep 1; done; echo "not up: $1"; }

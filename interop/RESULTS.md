@@ -305,6 +305,8 @@ Spec 3.1.6 lists `UnsupportedOperationError` for "the operation is attempted on 
 state". `a2a-sdk` 1.1.5's REST server answers `400`, reason `INVALID_PARAMS`, message "Task ... is in terminal
 state: 3". This library's `Listener` follows the spec (`UnsupportedOperationError`), and this client decodes what
 each server actually sends. Worth reporting upstream.
+**Fixed upstream in `a2a-sdk` 1.2.0** (verified live 2026-09-30): the same request now gets `400`, `"status": "FAILED_PRECONDITION"`,
+reason `UNSUPPORTED_OPERATION`. `run_more_checks.sh`'s check that asserts the old `INVALID_PARAMS` now fails against 1.2.0 for that reason.
 
 **14. (Reference servers agree with each other and with this library, except on the content-type status.)**
 Both real servers answer `400 VERSION_NOT_SUPPORTED` for `A2A-Version: 2.0`, for `0.3`, and for an absent header,
@@ -569,6 +571,8 @@ accepted; negative `historyLength` accepted on `GET /tasks/{id}`, and on `messag
 checked. The comment above `errorBindingFor` in `server_errors.bal` describes the spec table wrongly and should be corrected.
 **Comment fixed** in `module-ballerina-a2a` `2164445`; the returned statuses are unchanged (400/400/500, deliberately, matching
 the ecosystem over the spec text).
+**Corrected 2026-09-30, see finding 38:** the 409/415/502 figures came from the TCK's older spec mirror. The released v1.0.1 spec and
+current `main` (section 5.4) say 400/400/500, so the listener matches the spec, not only the ecosystem. a2a-java is now the outlier.
 
 Probed and fine: card ETag + 304, concurrent sends (40 parallel), malformed/empty/array/non-UTF-8 bodies (400), unknown path (404),
 terminal-task send and subscribe (`UNSUPPORTED_OPERATION`), encoded `%3Acancel`, path traversal and 5000-char ids (no 5xx), 5 MB body,
@@ -576,3 +580,137 @@ unknown fields ignored, lower-case header name, extended-card error correctly `U
 
 **Not done:** hostile-server probe of our *client* (unknown enum values, `tasks:null` per finding 24, split/CRLF/huge SSE frames,
 redirects, gzip, truncated bodies); X-A4 (needs Keycloak + LLM key for the Java sample); a2a-java REST error statuses.
+(The hostile probe and the a2a-java statuses were done in the next session, below.)
+
+## Session of 2026-09-30 (evening): two more languages (Rust, .NET), newer SDK releases, and the hostile-server probe of our client
+
+Build under test: `module-ballerina-a2a` `feat/http-json-listener` @ `2164445`, locally published (published `.bal` sources checked
+byte-identical to HEAD). Spec authority: A2A **v1.0.1** (`a2aproject/A2A` tag, `docs/specification.md` + `specification/a2a.proto`),
+cross-checked against `main`. Claude-backed agents use Claude Haiku 4.5, same as the earlier rigs. Rust and .NET run in Docker, so no
+toolchain was installed on the host. Everything below is a live run.
+
+### References used
+
+| Library | Version | Role |
+|---|---|---|
+| `a2a-rs` (`a2a-lf` 0.3.1, `a2a-client-lf` 0.2.5, `a2a-server-lf` 0.4.4, crates.io = `main` c3952b6) | **new** | agent + client, `rust-agent/`, `run_rust_checks.sh` |
+| `a2a-dotnet` built from `main` 76de7f3 (2026-09-26) | **new** | agent + client, `dotnet-agent/`, `run_dotnet_checks.sh`. The only NuGet release, 1.0.0-preview2, is from 2026-04-09 and predates the current API. |
+| `a2a-sdk` (Python) | 1.2.0 (was 1.1.5) | full re-run of pairs A/C, extended, more, client checks (`PY=... ./run_*.sh`) |
+| `@a2a-js/sdk` | 1.3.0 (was 1.2.1) | re-run of `run_node_checks.sh` (`NODE_DIR=...`) |
+| `a2a-java` | `ad9571c9` (level with `main`; 1.4.0.Final released) | pair B/D re-run, REST error table read |
+| `a2a-go` | v2.6.0 | re-run |
+| A2A TCK | `5996b79` | all four modes |
+
+### Results
+
+| Pair | Result |
+|---|---|
+| R-A: our client -> Rust agent (Claude) | Card, blocking send + artifact (`[claude] 2 + 2 = 4`), direct Message, multi-turn, returnImmediately + cancel running, typed errors (their `application/problem+json` bodies decode correctly), getTask historyLength, pageSize/pageToken, push CRUD: **PASS**. Stream: passes events through faithfully, but the Rust server never sends the opening Task (R1). ListTasks without `pageSize`: **FAIL, finding 33**. |
+| R-C: Rust client -> our listener | 27 of 28 **PASS**, including push delivery as a StreamResponse envelope. The 1 fail is the Rust client's (R3). |
+| D-A: our client -> .NET agent (Claude) | Everything **PASS** except multi-turn continuation (.NET bug D1), status filter (D2) and statusTimestampAfter (D3). Push withheld by the card -> `PushNotificationNotSupportedError` raised client-side. Our client's GET->POST subscribe fallback was needed and worked (.NET routes `:subscribe` as POST only). |
+| D-C: .NET client -> our listener | All flows **PASS**. The 3 fails are all D4 (their client ignores our `application/a2a+json` error bodies). |
+| Python 1.2.0, all rigs | 78/79; the 1 "fail" is finding 13 **fixed upstream** |
+| Node 1.3.0 | 43/43 PASS |
+| Java B/D, Go v2.6.0 | unchanged (Go: only the 2 known finding-25 failures) |
+| TCK default / no-capabilities | 89/4 and 71/5: the same 3 known requirements (CARD-CACHE-003, and HTTP_JSON-ERR-001 / SVC-001 from the TCK's stale `application/json` expectation). The extended mode no longer starts, see finding 42. |
+| `ai:A2aToolKit` (Traveler, Claude) -> Rust + .NET Claude agents | Rust: discovery, INPUT_REQUIRED, continuation on the same task id, exactly 1 task: **PASS**. "List the tasks": the model got finding 33's error. .NET: the continuation hit D1, and the model's retry created a 2nd task (finding 41). |
+
+### Findings (ours)
+
+**33. (Defect, client) `listTasks` rejects a ProtoJSON response that omits default-valued fields.** `ListTasksResponse` (`types.bal:490`)
+makes `nextPageToken`, `pageSize` and `totalSize` required, non-optional fields. ProtoJSON omits `""` and `0`, so a real a2a-rs server's last
+page (`{"pageSize":50,"tasks":[...],"totalSize":2}`) fails with `ListTasks response did not match the expected shape: ConversionError`. So
+does `{}`, the canonical ProtoJSON rendering of an empty page. The `tasks: null` fix (finding 24) covered only `tasks`. Spec 5.7 says REQUIRED
+fields "MUST be present and set", so a2a-rs is also deviating (R4). But proto3 cannot tell an empty token from an absent one, and both
+reference clients accept it: `a2a-sdk` 1.2.0 -> `next_page_token=''`, `@a2a-js/sdk` -> `nextPageToken=""`. Users hit this in practice: the
+Traveler's model reported "the agent's response didn't match the expected format". Proposed: default a missing or `null` `nextPageToken`
+to `""`, and `pageSize`/`totalSize` to `0`, in `decodeListTasksResponse`. **Do finding 34 first**, or an unparseable body (-> `{}`) turns
+into a silent empty page. (Also: the comment above that normalisation in `http_client.bal:185-200` is pasted in twice.) **Fixed**
+(`module-ballerina-a2a@4d8c851`): `decodeListTasksResponse` now defaults a missing/null `nextPageToken`/`pageSize`/`totalSize` to
+`""`/`0`/`0` before decoding, after finding 34's fix. Covered by `testRestClientDefaultsOmittedListTasksFieldsToZeroValue` and
+`testRestClientDecodesEmptyListTasksObject`; the pasted-twice comment is also corrected.
+
+**34. (Defect, client) An unparseable 2xx body is silently replaced with `{}`** (`http_client.bal:526`, `restCall`). For
+`listTaskPushNotificationConfigs`, whose response type is all-optional, a **truncated or HTML 200 body returns success with 0 configs**
+(hostile cases `p_truncated`, `p_html`). A caller concludes nothing is registered. For other operations the error is typed but misleading
+("Response contained neither a task nor a message" for a truncated body or a BOM). `a2a-sdk` raises on both (network error, JSON decode
+error). Proposed: only an operation that expects an empty body (DELETE) may treat an empty body as `{}`. Anything else unparseable is
+`InvalidAgentResponseError` carrying the parse error. **Fixed** (`module-ballerina-a2a@4d8c851`): `restCall` now returns
+`InvalidAgentResponseError` for an unparseable 2xx body on every operation except `deleteTaskPushNotificationConfig` (the only DELETE,
+matching its google.protobuf.Empty wire response). Covered by `testRestClientRejectsUnparseableTwoxxBody` and
+`testRestClientDeleteToleratesUnparseableEmptyBody`.
+
+**35. (Minor, client) Other ProtoJSON leniencies the reference client has and ours lacks.** `"history": null` / `"metadata": null` on a
+Task -> `ConversionError` (ProtoJSON: `null` is the field default; `a2a-sdk` accepts). An integer enum (`"state": 3`) is rejected (ProtoJSON
+parsers accept integers; `a2a-sdk` accepts). Spec 5.5 requires senders to emit names, so this only matters against a non-conforming
+server. Low. No real server seen doing either yet. **Fixed** (`module-ballerina-a2a@4d8c851`): a new `normalizeTaskStateJson`, applied at
+every Task/TaskStatusUpdateEvent decode site (unary and streaming), removes a null `history`/`metadata` and remaps an integer `state`
+ordinal to its name before decoding. Covered by `testRestClientAcceptsNullHistoryAndMetadataOnATask` and
+`testRestClientAcceptsIntegerTaskState`.
+
+**36. (Upstream `ballerina/http`, reached through the client) SSE parsing is roughly 100x slower than JSON.** A 2 MB artifact takes
+**0.064 s** as a unary reply but **7–8.4 s** as one SSE event, with a warm JIT. `a2a-sdk` reads the same event in **0.06 s**. The trace goes
+through `http:BytesToEventStreamGenerator.getNextByte` / `readUntilDoubleLineBreaks`, a byte-at-a-time reader. Impact: streaming large
+artifacts (documents, code, images as base64) through `ballerina/a2a`. Report to `ballerina/http`.
+
+**37. (Minor, listener) `GET /tasks/a/b/c` is served as `GetTask` for id `a/b/c`** (`dispatcher.bal:365-367`; the `:cancel` / `:subscribe`
+branches slice the same way). The proto's `{id=*}` matches one path segment. `POST` to the same path is already `METHOD_NOT_FOUND`. Found
+because the Rust client's legacy fallback calls `GET /tasks/{id}/subscribe` and got `TASK_NOT_FOUND "no task with id <id>/subscribe"`.
+Practical impact is small (still a 404). The fix is to reject an id containing `/`. **Fixed** (`module-ballerina-a2a@4d8c851`): all
+three branches (`GetTask`, `:cancel`, `:subscribe`) now fall through to the same `404 METHOD_NOT_FOUND` an unmatched route gets when
+`{id}` contains `/`. Covered by `testTaskIdWithASlashIs404NotACrossSegmentLookup`.
+
+**38. (Correction of finding 32) Our error statuses match the released spec.** v1.0.1 and `main` section 5.4: `TaskNotCancelable`,
+`ContentTypeNotSupported`, `PushNotificationNotSupported`, `UnsupportedOperation`, `VersionNotSupported` -> **400**,
+`InvalidAgentResponse` -> **500**, which is what the listener sends. The 409/415/502 figures were from the TCK's mirror
+(`a2a-tck/specification/specification.md:1185`). a2a-java (`spec/.../A2AErrorCodes.java`) uses 409 / 415 / 502 and also **422** for
+`InvalidParams`, so it is the implementation that differs from the current text. Every client tested decodes by `reason` either way. One
+cosmetic gap: our error body has no `"status"` (gRPC status name). The Rust, .NET and Python servers include one and spec 11.6's example
+shows it, but its field list names only code, message and details.
+
+**39. (Positive) Hostile-server probe of our client** (`hostile-server/hostile.py` + `bal-client-hostile`; 38 cases, each compared with
+`a2a-sdk` where relevant). These are handled correctly and promptly: unknown fields and unknown StreamResponse arms are skipped (spec 5.7);
+unknown enum values give a typed error; a two-arm oneof is refused; HTML / 500 / 503 bodies; gzip; chunked encoding; a hung server times out
+at the configured timeout; `application/problem+json` error bodies decode to the typed error (the Go and .NET clients cannot do this);
+CRLF-only, CR-only, `data:` without a space, multi-line `data:`, frames split mid-JSON, `id` / `event` / `retry` fields and comments;
+malformed event JSON and named `error` frames give typed errors; events after the terminal state are not delivered; a silent stream times
+out. A 307 redirect is not followed by default (`clientConfig.followRedirects` exists). Our client and `a2a-sdk` behave the same, so these
+are not ours to fix alone: a stream that closes before any terminal state ends cleanly, with no error (the caller must check the last state),
+and a leading UTF-8 BOM makes the first event disappear silently (WHATWG SSE says to strip it).
+
+**40. (Positive) Python `a2a-sdk` 1.2.0 fixed finding 13** (see above).
+
+**41. (Toolkit observation, triggered by .NET bug D1) A 5xx on a continuation leads the model to retry, creating a duplicate task.** The
+.NET server ran the handler and completed the task, but answered 500. The model, told the call failed, resent: first "terminal state",
+then a new task. That makes 2 tasks where 1 was intended. The root cause is theirs. But `A2aToolKit` could tell the model, on an error for
+a continuation, to check the task with `getTask` before resending (the same class as the earlier Milan duplicate-task regression).
+
+**42. (Rig) TCK extended mode can no longer run.** `tck-sut -CextendedCard=true` is refused at startup: "`extendedAgentCard` requires
+`ListenerConfiguration.auth`". That is correct per spec 13.3 ("MUST require authentication"). The TCK sends no credentials, so the mode
+needs redefining, e.g. declare the capability without configuring a card, which is what the TCK's `ExtendedAgentCardNotConfigured`
+tests check.
+
+### Findings (other SDKs; none has an existing upstream issue, searched 2026-09-30)
+
+**a2a-rs** (`a2a-server-lf` 0.4.4 / `a2a-client-lf` 0.2.5):
+- **R1** A task-lifecycle stream starts with a `statusUpdate` and never sends the opening `Task`. Spec 3.1.2: "the stream MUST begin with
+  the Task object". Our client tolerates it.
+- **R2** `InMemoryTaskStore::list` (`task_store/inmemory.rs:91-111`) ignores `statusTimestampAfter`; the REST layer parses it, then drops it.
+- **R3** The client treats `UNSUPPORTED_OPERATION` as "use the legacy path" (`should_retry_subscribe_with_legacy_path`, `a2a-client/src/rest.rs:255`).
+  So subscribing to a finished task hides the spec 3.1.6 error behind the second call's `TASK_NOT_FOUND`.
+- **R4** The last `ListTasks` page omits `nextPageToken` (spec 5.7 REQUIRED). List responses are also `application/json`, while other
+  responses are `application/a2a+json`.
+- *Rig lesson:* `ExecutorContext.stored_task` is already `Some` on a task's first turn; use `message.task_id` to detect a continuation.
+
+**a2a-dotnet** (`main` 76de7f3):
+- **D1** A blocking `SendMessage` continuing an `INPUT_REQUIRED` task always fails, `500 INVALID_AGENT_RESPONSE "Agent handler did not
+  produce any response events"`. The handler still runs and completes the task. Reproduced with the SDK's **own** `ResearcherAgent`
+  sample over JSON-RPC (so not the REST binding, and not this rig), following the SDK's documented multi-turn pattern.
+- **D2** The server's `GET /tasks?status=` accepts only C# enum names (`Enum.TryParse`, `A2AHttpProcessor.cs:174`). It rejects
+  `TASK_STATE_CANCELED`, which is what its own client sends, and it answers with an RFC 9457 problem document instead of `google.rpc.Status`
+  (spec 11.6).
+- **D3** The REST `ListTasks` route never binds `statusTimestampAfter` or `includeArtifacts`, so both are ignored.
+- **D4** The client parses an error body only when `Content-Type` is exactly `application/json` (`A2AHttpJsonClient.cs:417`), the same bug
+  as a2a-go #447. Against our `application/a2a+json` errors, every 400 becomes `InvalidRequest` and only 404 comes out right, by
+  coincidence. Its reason table also lacks `INVALID_PARAMS` and the other JSON-RPC-range reasons.
+- Known upstream: no push notifications (#504). The NuGet 1.0.0-preview2 release is about six months behind `main`.

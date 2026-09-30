@@ -5,7 +5,7 @@
 #   2. a REQUIRED extension seen from the real Python client         (driver_extension.py)
 #   3. opt-in stream reconnection through a proxy that cuts the stream (bal-client-reconnect)
 # Needs a2a-java built (see run_pair_b_d.sh) for the Java half of step 1.
-HERE=$(cd "$(dirname "$0")" && pwd); PY="$HERE/python-agent/.venv/bin/python"
+HERE=$(cd "$(dirname "$0")" && pwd); PY="${PY:-$HERE/python-agent/.venv/bin/python}"
 A2A_JAVA_DIR=${A2A_JAVA_DIR:-$HOME/gitProject/a2a-java}
 kill_ports() { for p in "$@"; do lsof -ti :"$p" -sTCP:LISTEN 2>/dev/null | xargs -r kill 2>/dev/null; done; }
 trap 'kill_ports 9611 9700 9704 9705 9999' EXIT; kill_ports 9611 9700 9704 9705 9999; sleep 1

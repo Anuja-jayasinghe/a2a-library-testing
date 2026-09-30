@@ -147,7 +147,11 @@ public function main(string url = "http://localhost:9800") returns error? {
     expect("statusTimestampAfter in the past -> all", l6 is a2a:ListTasksResponse && l6.tasks.length() > 0);
 
     io:println("== I12: push-notification config CRUD ==");
-    if r is a2a:Task {
+    if r is a2a:Task && card.capabilities.pushNotifications != true {
+        a2a:TaskPushNotificationConfig|a2a:Error pc = c->createTaskPushNotificationConfig({url: "http://localhost:19871/hook", taskId: r.id, id: "cfg1"});
+        expect("card withholds push -> PushNotificationNotSupportedError", pc is a2a:PushNotificationNotSupportedError,
+                pc is error ? pc.message() : "succeeded");
+    } else if r is a2a:Task {
         a2a:TaskPushNotificationConfig|a2a:Error pc = c->createTaskPushNotificationConfig({url: "http://localhost:19871/hook", taskId: r.id, id: "cfg1", token: "tok"});
         expect("create push config", pc is a2a:TaskPushNotificationConfig, pc is error ? pc.message() : "");
         a2a:ListTaskPushNotificationConfigsResponse|a2a:Error pl = c->listTaskPushNotificationConfigs({taskId: r.id});

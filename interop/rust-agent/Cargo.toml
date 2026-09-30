@@ -1,0 +1,26 @@
+[package]
+name = "rust-interop"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Released crates from a2aproject/a2a-rs (A2A v1.0), identical to its main as of 2026-09-30.
+[dependencies]
+a2a = { package = "a2a-lf", version = "=0.3.1" }
+a2a-client = { package = "a2a-client-lf", version = "=0.2.5" }
+a2a-server = { package = "a2a-server-lf", version = "=0.4.4" }
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+serde_json = "1"
+chrono = "0.4"
+async-trait = "0.1"
+
+[[bin]]
+name = "agent"
+path = "src/agent.rs"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"

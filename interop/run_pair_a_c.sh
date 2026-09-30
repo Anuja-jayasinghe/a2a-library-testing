@@ -10,7 +10,7 @@
 
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
-PY="$HERE/python-agent/.venv/bin/python"
+PY="${PY:-$HERE/python-agent/.venv/bin/python}"
 PY_AGENT_PORT=9700
 BAL_LISTENER_PORT=9611
 
