@@ -396,8 +396,7 @@ commits behind `origin/main`).
 | Push webhook delivery as a `StreamResponse` envelope | not run (the Node agent's sender was not exercised) | PASS |
 | 75s stream silent except 15s keep-alives, read by Node's undici SSE parser (previously only Python) | n/a | PASS (75.1s) |
 
-Not run: the Claude-backed mode of the Node agent. No `ANTHROPIC_API_KEY` was available in this session, so every Node
-result above used the deterministic stub (the artifact text starts with `[stub]`, `[claude]` when the model answers).
+**Claude-backed re-run (2026-09-30, Haiku 4.5):** with the key loaded (`load_env.sh`), the Node agent (`node agent on ... (Claude claude-haiku-4-5-20251001)`) and the Go agent (`go agent on ... (Claude ...)`) answered with real model output (`[claude] 2 + 2 = 4`) and the same results as the stub runs: Node 43 PASS, `OVERALL: PASS` both directions; Go 38 PASS with only the three known failures (findings 24, 25). Zero `[stub]` replies in either log. Assertions are on protocol behaviour, never wording. `run_llm_checks.sh` (Ballerina `ai:Agent` Trip Planner, two-turn Python client) also passed; it needs `interop/python-agent/.venv` created first (`uv venv .venv && uv pip install -r requirements.txt`) and the `.env` exported (`set -a; . ../.env`).
 
 ### Go: `a2a-go` v2.6.0 (`interop/go-agent`, run with `run_go_checks.sh`)
 
@@ -514,3 +513,66 @@ interoperates with a real other-language client, not only with this library's ow
 - `python-agent/agent.py` covers a subset of the `tck-sut` contract (echo, completed+artifact,
   input-required, fail, immediate-complete, cancelable, raw bytes) -- enough for this pass,
   not the full grid yet.
+
+## Session of 2026-09-30 (later): full re-run on the republished build, plus raw-HTTP spec probes (`spec-probes/probe.py`)
+
+Build under test: `module-ballerina-a2a` `feat/http-json-listener` (PR #4, draft), republished to the local repo; 454 unit tests pass.
+Regression: every interop script passes (Python pair, extended, Java pair, auth, client ops/OAuth/TLS, typed errors, Node with Claude,
+Go with Claude) except the two Go typed-error checks, which are finding 25 (a2a-go client bug), unchanged. `run_pair_b_d.sh` gained a
+25s bound: the Java sample client waits forever for a `MessageEvent` a task-producing agent never sends (it had received the Task and
+all 3 updates, including COMPLETED). Harness artifact, not a library bug.
+
+**26. (Defect, ours; spec 3.6) A patch version in `A2A-Version` is rejected.** `dispatcher.bal` `checkVersion` compares the header to
+"1.0" exactly, so `1.0.5` -> `VERSION_NOT_SUPPORTED`. Spec 3.6: patch numbers "MUST not be considered" in negotiation; agents match
+`Major.Minor`. Python `a2a-sdk` (`utils/version_validator.py`) and `a2a-java` (`A2AVersionValidator`) both accept it. Fix: compare major.minor.
+(`1.1` is correctly refused per the spec's Major.Minor rule; both reference SDKs are laxer, accepting any 1.x.)
+**Fixed** in `module-ballerina-a2a` `2164445`: a new `majorMinor` helper drops any third-or-later dot-separated component before
+comparing. Verified with a dedicated test, mutation-checked, and reconfirmed live with `probe.py` itself against the republished
+listener -- V3 (`1.0.5`) now `200`, V4 (`1.1`) still correctly `400 VERSION_NOT_SUPPORTED`.
+
+**27. (Deviation, low; spec 3.6.1 MAY) `A2A-Version` as a query parameter is ignored,** so the request is treated as version 0.3 and refused.
+Neither reference SDK reads it either.
+
+**28. (Defect, ours; proto `ListTasksRequest`, spec 6.5) `GET /tasks` paging is unbounded and fails silently.** Measured on 130 tasks:
+no `pageSize` -> all 130 (spec/proto/Python: default 50); `pageSize=101` and `100000` -> 101 / all (max is 100); `pageSize=0` and `-3`
+-> an empty page with `totalSize` 130 and no `nextPageToken`, so a caller sees "no results". Python `validate_page_size` raises
+InvalidParams outside 1..100 (proto: min 1, max 100). In `InMemoryTaskStore.list` (`task_store.bal`) the size falls back to
+`matched.length()`, and negatives are clamped to 0.
+**Fixed** in `module-ballerina-a2a` `2164445`: defaults to 50 (`LIST_TASKS_DEFAULT_PAGE_SIZE`); an explicit value outside 1..100 is now
+`InvalidParams` (400), matching spec 6.5's own validation example rather than clamping. Verified with dedicated tests (default,
+each out-of-range case), mutation-checked, and reconfirmed live with `probe.py` -- L1-L4 (`pageSize` 0, -1, 101, 1000000) all now
+`400 INVALID_PARAMS`.
+
+**29. (Defect, ours) Invalid `GET /tasks` query values are silently ignored or return nothing.** `pageToken=bogus` -> empty page (Python:
+InvalidParams "Invalid page token"); `status=nonsense` -> the filter is dropped and every task returns; `pageSize=abc`, `historyLength=abc`
+-> ignored; `statusTimestampAfter=garbage` -> 0 tasks. Spec 6.5 shows 400 with per-field errors. `queryToListFilter` (`dispatcher.bal`).
+**Fixed** in `module-ballerina-a2a` `2164445`: `queryToListFilter` now returns `ListTasksRequest|Error`, rejecting an unrecognized
+`status`, or a non-numeric `pageSize`/`historyLength`/unparseable `statusTimestampAfter`, with `InvalidParams`; a `pageToken` naming no
+task in the current result set is rejected the same way in `InMemoryTaskStore.list` (a business rule, not a wire-format one, so it
+lives with the store instead of the dispatcher). `historyLength`'s own *range* (a negative value) is untouched -- that's finding 31,
+not this one, and wasn't part of this batch. Verified with dedicated tests, mutation-checked, and reconfirmed live with `probe.py` --
+L5 (`pageSize=abc`), L6 (`pageToken=garbage`), L8 (`status=working`), L12 (`statusTimestampAfter=notadate`) all now
+`400 INVALID_PARAMS`.
+
+**30. (Minor) Push-config registration accepts any `url`,** including `""`, `not a url`, `file:///etc/passwd` (proto marks `url` REQUIRED).
+Rejection happens only at delivery and is swallowed, so a client is never told. Delivery-time SSRF guard (default on) verified end to end
+against a local receiver: `127.0.0.1`, `localhost`, `LOCALHOST.`, `127.1`, decimal, hex, octal, `0.0.0.0`, `[::1]`, both v4-mapped v6 forms,
+userinfo and backslash tricks, and the host's LAN address were all blocked. **Not blocked: a hostname resolving to loopback**
+(`localtest.me` was delivered), the DNS gap the source already concedes; spec 13.2 SHOULD.
+
+**31. (Minor) Required-field checks are uneven.** Missing `messageId` -> 400, but `messageId: ""` and `role: ROLE_UNSPECIFIED` are
+accepted; negative `historyLength` accepted on `GET /tasks/{id}`, and on `message:send` configuration.
+
+**32. (Spec vs every reference SDK, not a Ballerina-only bug) Error statuses.** Spec 5.4 lists `TaskNotCancelable` 409,
+`ContentTypeNotSupported` 415, `InvalidAgentResponse` 502. The listener returns 400 / 400 / 500, exactly like `a2a-sdk` 1.1.2
+(`A2A_ERROR_MAPPING`), `a2a-go` (`internal/rest/rest.go`) and `@a2a-js/sdk` (`REST_ERROR_HTTP_STATUS`). The a2a-java REST mapping was not
+checked. The comment above `errorBindingFor` in `server_errors.bal` describes the spec table wrongly and should be corrected.
+**Comment fixed** in `module-ballerina-a2a` `2164445`; the returned statuses are unchanged (400/400/500, deliberately, matching
+the ecosystem over the spec text).
+
+Probed and fine: card ETag + 304, concurrent sends (40 parallel), malformed/empty/array/non-UTF-8 bodies (400), unknown path (404),
+terminal-task send and subscribe (`UNSUPPORTED_OPERATION`), encoded `%3Acancel`, path traversal and 5000-char ids (no 5xx), 5 MB body,
+unknown fields ignored, lower-case header name, extended-card error correctly `UNSUPPORTED_OPERATION` when the capability is false.
+
+**Not done:** hostile-server probe of our *client* (unknown enum values, `tasks:null` per finding 24, split/CRLF/huge SSE frames,
+redirects, gzip, truncated bodies); X-A4 (needs Keycloak + LLM key for the Java sample); a2a-java REST error statuses.

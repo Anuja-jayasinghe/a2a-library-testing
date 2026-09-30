@@ -7,6 +7,7 @@
 # Setup once: (cd node-agent && npm install). Requires ballerina/a2a published locally.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
+. "$HERE/load_env.sh"
 cleanup() { pkill -f "node-agent/agent.mjs\|node agent.mjs" 2>/dev/null; pkill -f "interop/bal-listener" 2>/dev/null; pkill -f push_receiver.py 2>/dev/null; pkill -f bal_listener 2>/dev/null; true; }
 trap cleanup EXIT; cleanup; sleep 1
 up() { for _ in $(seq 1 90); do curl -sf "$1" >/dev/null && return; sleep 1; done; echo "NOT UP: $1"; }
