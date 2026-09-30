@@ -7,3 +7,5 @@ tck-sut/target/
 tck-sut/reports/
 interop/*/target/
 interop/keycloak/__pycache__/
+node_modules/
+.env

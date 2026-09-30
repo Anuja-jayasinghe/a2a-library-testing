@@ -428,13 +428,19 @@ that broke ours (finding 21).
 as a repeated (always-present) field, so the Go output is sloppy, but proto3 JSON says `null` means the field default, and the Node SDK's
 decoder accepts it. A client that talks to more than one SDK should treat `null` for a repeated field as empty. **Not fixed.**
 
-**25. (SDK divergence from the live spec; not our bug, but it defeats our error mapping) The Go client turns every error from our
-listener into a generic `server error`.** `a2a-go` `internal/rest/rest.go` `FromRESTError` returns `a2a.ErrServerError` unless
-`Content-Type` starts with `application/json`; our listener (following the live spec, which uses `application/a2a+json` throughout)
-answers `application/a2a+json`, so the `google.rpc.Status`/`ErrorInfo` body is never decoded and `errors.Is(err, a2a.ErrTaskNotFound)` is
-false. The Go server itself emits plain `application/json`. Same disagreement as the two TCK failures `HTTP_JSON-ERR-001`/`SVC-001`.
-Options: report upstream to a2a-go, or have the listener content-negotiate (answer `application/json` when the request's `Accept`
-lists only that; the Go client sends `Accept: application/json`). **Not changed**; needs a decision.
+**25. (Verified 2026-09-30; a2a-go client bug against a SHOULD-level spec media type) The Go client turns every error from our
+listener into a generic `server error`.** `a2a-go` v2.6.0 (`main` was identical) `internal/rest/rest.go` `FromRESTError` returns
+`a2a.ErrServerError` unless `Content-Type` starts with `application/json`. **Spec:** section 11.1 says `application/a2a+json` "SHOULD be
+used for requests and responses" (SHOULD, not MUST), and section 11.6's own 404 TASK_NOT_FOUND example is served as `application/a2a+json`;
+so our listener is doing what the spec's example shows, and `application/json` servers remain legitimate. (The spec is internally
+inconsistent elsewhere: section 6 examples use `application/problem+json` and a different body.) **Reproduced in isolation**
+(`go-agent/repro_ct`, a bare `httptest` server, header is the only variable): `application/json` and `application/json; charset=utf-8` ->
+`ErrTaskNotFound`; `application/a2a+json` and `application/problem+json` -> `server error`. Success responses and requests are unaffected
+(the Go server accepts `a2a+json` and any other request type). No existing upstream issue or PR covers it (searched `a2aproject/a2a-go`).
+**Fix prototyped**, local branch `fix/rest-error-json-suffix` in `~/gitProject/a2a-go` (not pushed): `mime.ParseMediaType`, accept
+`application/json` and `application/a2a+json`; two new table cases in `TestFromRESTErrorEdgeCases` fail without it and pass with it,
+`internal/rest`, `a2aclient`, `a2asrv`, `a2acompat` suites pass; the patched client passes the two typed-error checks against our listener
+(stock v2.6.0: 2 FAIL). Draft issue text: `go-agent/UPSTREAM_ISSUE_DRAFT.md`. Their CONTRIBUTING asks for an issue before a PR. **Filed 2026-09-30:** issue https://github.com/a2aproject/a2a-go/issues/447, draft PR https://github.com/a2aproject/a2a-go/pull/448. The listener-side alternative (answer `application/json` when `Accept` lists only that) is not needed if this is fixed upstream.
 
 **21. (Defect, ours; found by the Node agent) `HttpClient` builds `//message:send` when the card's interface URL ends in
 `/`, and the server answers 404.** `@a2a-js/sdk` advertises `http://localhost:9800/` for a root-mounted agent. Every
