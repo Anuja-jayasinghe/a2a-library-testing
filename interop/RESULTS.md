@@ -427,7 +427,9 @@ that broke ours (finding 21).
 `"tasks":null`.** Seen with `curl` (`{"tasks":null,"totalSize":0,...}`), from Go's nil slice under a non-`omitempty` tag. Our
 `HttpClient.listTasks` then fails with `ListTasks response did not match the expected shape: ConversionError`. The spec models `tasks`
 as a repeated (always-present) field, so the Go output is sloppy, but proto3 JSON says `null` means the field default, and the Node SDK's
-decoder accepts it. A client that talks to more than one SDK should treat `null` for a repeated field as empty. **Not fixed.**
+decoder accepts it. A client that talks to more than one SDK should treat `null` for a repeated field as empty. **Fixed**
+(`module-ballerina-a2a@26e37f7`, stale here since): `HttpClient.listTasks` now normalizes `"tasks": null` to `[]` before decoding.
+Covered by `testRestClientTreatsNullTasksAsEmpty`; verified with a mutation check and a live TCK rerun at the time.
 
 **25. (Verified 2026-09-30; a2a-go client bug against a SHOULD-level spec media type) The Go client turns every error from our
 listener into a generic `server error`.** `a2a-go` v2.6.0 (`main` was identical) `internal/rest/rest.go` `FromRESTError` returns
@@ -449,7 +451,8 @@ operation from `a2a:HttpClient` then failed with `REST request failed with HTTP 
 404, `/message:send` is 200). The reference `@a2a-js/sdk` client, given the same card, works. `http_client.bal` passes
 the URL straight to `http:Client` and appends paths that start with `/`. A root-mounted agent is the common case, so this
 would hit real users. Proposed fix: strip trailing `/` from the interface URL when building the client. Workaround used
-in the rig: `TRAILING_SLASH=0`. **Not fixed**; needs a decision on whether to amend `c167fe3` or add a new commit.
+in the rig: `TRAILING_SLASH=0`. **Fixed** (`module-ballerina-a2a@26e37f7`, stale here since): as a new commit, reusing
+`discovery.bal`'s existing `stripTrailingSlash`. Covered by `testRestClientStripsTrailingSlashFromInterfaceUrl`.
 
 **22. (Defect, ours; root cause of a "pre-existing" TCK failure) `message:send` ignores `configuration.historyLength`.**
 TCK `CORE-HIST-003` ("SendMessage with historyLength=0 returned 2 history message(s), expected none") has failed since
@@ -457,7 +460,12 @@ the 88/4 baseline. Reproduced without the TCK: `POST /message:send` with `config
 `history` of length 1 from our listener and no `history` key from the Node agent; `historyLength: 1` returns 1 from both.
 Spec 3.2.4: "0: No history should be returned; the `history` field SHOULD be omitted". In the library, only `getTask`
 (`default_handler.bal:692`) and `listTasks` (`task_store.bal:284`) trim history; `sendMessage` never reads
-`configuration.historyLength`. **Not fixed.** That leaves 3 of the 4 TCK failures: `CARD-CACHE-003` (optional
+`configuration.historyLength`. **Fixed** (`module-ballerina-a2a@26e37f7`, stale here since): `sendMessage`'s
+driven-synchronously return, its `returnImmediately` early return, and the one `Task` snapshot `sendStreamingMessage`
+broadcasts live now all honor it (the last via a new `TaskUpdater` constructor parameter, applied only to that
+broadcast, not `self.base`). `getTask`'s own inline trim was also replaced with the `projectTask` helper `listTasks`
+already used. Confirmed live against a real Node (`@a2a-js/sdk`) client and by a TCK rerun: `CORE-HIST-003` gone.
+That leaves 3 of the 4 TCK failures (still true today): `CARD-CACHE-003` (optional
 `Last-Modified` on the card), and `HTTP_JSON-ERR-001` / `HTTP_JSON-SVC-001` (the TCK's stale snapshot expects
 `application/json`; our `application/a2a+json` matches the live spec and is now accepted by current Java too).
 
