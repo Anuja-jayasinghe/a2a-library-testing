@@ -200,16 +200,16 @@ request), which is exactly why testing against a second real reference implement
 this as a documented `clientConfig` workaround, or have `ballerina/a2a`'s `HttpClient` default
 to HTTP/1.1 itself, since h2c-cleartext is a niche server opt-in almost nothing enables.
 
-**6. (Their bug, evidenced not assumed) The real `a2a-java` reference client throws after a
-streaming exchange completes successfully.** Sending a message via the Java client's streaming
-path against our listener: the client receives a `TaskEvent` and three `TaskUpdateEvent`s
-correctly, then throws `java.io.IOException: Stream 1 cancelled` from its own
-`AbstractSSEEventListener.handleEvent`, surfaced to the caller as `"Failed to get response"`.
-Checked directly with `GET /tasks` on our listener afterward: the task is `TASK_STATE_COMPLETED`.
-So the exchange succeeded end to end; the client's own HTTP/2 stream teardown after the last
-event throws in a way its own high-level API treats as failure. Nothing on our side logged an
-error for the request. Recorded as a finding about the reference client, not something to fix
-in `ballerina/a2a`.
+**6. (Their bug, since FIXED upstream; re-verified live 2026-09-29) The real `a2a-java` reference client threw after a
+streaming exchange completed successfully.** Against our listener the client received a `TaskEvent` and three
+`TaskUpdateEvent`s, then threw `java.io.IOException: Stream 1 cancelled` from `AbstractSSEEventListener.handleEvent`
+(surfaced as "Failed to get response"), although the task was `TASK_STATE_COMPLETED` on our side. Fixed upstream by
+`c2577629` "fix(client): deliver exactly one terminal SSE callback (#1170) (#1173)", merged 2026-09-24. **Re-run on
+`a2a-java` `ad9571c9` (68 commits newer, rebuilt):** `java-client-stream/StreamDriver.java` gets the same 4 events, **0
+error callbacks and exactly one normal-completion callback**. Note the new contract: the stream's error handler is now
+called with a **`null` Throwable** on normal completion, so a handler that dereferences its argument (as the stock
+`HelloWorldClient` does) will NPE, and that sample also hangs against any task-producing agent because it only completes
+on a `Message` reply. Neither is a `ballerina/a2a` issue. Nothing to fix on our side.
 
 **7. (FIXED in `module-ballerina-a2a` `c37f89e`) Caller mistakes were answered with 5xx.**
 Found by I14, confirmed against the source (`dispatcher.bal`, `stripTenant` and the fall-through):
@@ -293,12 +293,12 @@ public URL. Proposed: derive `https` when `secureSocket` is configured, plus an 
 proxies and pre-built `http:Listener`s.
 **Fixed** in `module-ballerina-a2a` `94b0212`: the scheme comes from the HTTP listener itself (`getConfig().secureSocket`), so it is right for a port and for a listener passed in, and `ListenerConfiguration.publicUrl` is served verbatim for proxies and gateways (validated; `X-Forwarded-*` deliberately ignored). The TLS rig now passes without the by-hand URL correction, and a `publicUrl` listener (9616) serves the configured address.
 
-**12. (Context that changes how to read earlier results) The current Java reference server rejects
-`application/a2a+json` with 415.** Checked directly against the freshly built `a2a-java` server: `POST /message:send`
-with `Content-Type: application/a2a+json` is **415**, with `application/json` it is **200**. So pair B passed only
-because this client's content-type fallback retried with `application/json`. The fallback is essential for
-reaching the Java reference implementation, not a legacy leftover. (The live spec's own media type is
-`application/a2a+json`; this is the Java server disagreeing with it.)
+**12. (Was a Java reference-server bug, since FIXED upstream; re-verified live 2026-09-29) The Java reference server
+rejected `application/a2a+json` with 415.** Fixed by `c78c472f` "fix(rest): support application/a2a+json content type"
+(2026-09-25). On `a2a-java` `ad9571c9`, `POST /message:send` returns **200 for both `application/a2a+json` and
+`application/json`**. This client's content-type fallback is therefore no longer needed for current Java `main`, but is
+still needed for older builds, so it stays. (`run_more_checks.sh`'s fallback check now passes without exercising the
+fallback against current Java; it only guards older builds.)
 
 **13. (Deviation by the Python reference server) Subscribing to a finished task is `400 INVALID_PARAMS`.**
 Spec 3.1.6 lists `UnsupportedOperationError` for "the operation is attempted on a task that is in a terminal
@@ -368,15 +368,139 @@ continues it, cancels a paused one, and also receives the transition as an event
 *Harness note:* `a2a-sdk`'s `TaskNotFoundError` is not an `A2AClientError`; a driver that catches only the latter
 misses it.
 
+## Session of 2026-09-29: fresh re-run on current code, plus a third language (Node, `@a2a-js/sdk` 1.2.1)
+
+Library: `module-ballerina-a2a` `feat/http-json-listener` @ `c167fe3`, republished locally. Java reference rebuilt from
+`a2a-java` `ad9571c9`. Everything below is a live run from this session.
+
+**Re-run of the existing grid (no regressions):** pair A/C (Python) PASS; `run_extended.sh` PASS (I4, I5, I9, I10, I12,
+I13, I14, I15); `run_client_checks.sh` all sections `OVERALL: PASS` (client ops, OAuth2/JWKS, TLS/mTLS); `run_pair_x_a.sh`
+PASS; `run_more_checks.sh` PASS (version/extension/streaming errors, reconnection); pair B (our client -> current Java
+server) PASS; pair D via `StreamDriver` PASS (Finding 6 gone). TCK: **88 passed / 4 failed, unchanged** (checkout is 11
+commits behind `origin/main`).
+
+**New: Node agent, `interop/node-agent/agent.mjs`** (`@a2a-js/sdk` 1.2.1, `restHandler` only, A2A v1.0; the SDK's
+`A2A_PROTOCOL_VERSION` is `"1.0"`, with a separate `compat/v0_3` layer left disabled). Run with `run_node_checks.sh`.
+
+| Scenario | N-A: our client -> Node agent | N-C: Node client -> our listener |
+|---|---|---|
+| Card discovery / HTTP+JSON v1.0 negotiation | PASS | PASS |
+| Blocking send -> COMPLETED Task + artifact; direct Message reply | PASS | PASS (Task) |
+| Streaming send (Task, artifact, COMPLETED, EOF) | PASS | PASS |
+| Multi-turn INPUT_REQUIRED -> same task id -> COMPLETED | PASS | PASS |
+| `returnImmediately`, then subscribe / cancel a **running** task | PASS (cancel -> CANCELED) | PASS (subscribe to COMPLETED) |
+| Typed errors: TaskNotFound, TaskNotCancelable | PASS | PASS |
+| `getTask` `historyLength` (0, 1) | PASS | PASS |
+| `ListTasks`: `pageSize`+`pageToken`, `status`, **`historyLength`, `statusTimestampAfter`** (previously unrun) | PASS | PASS |
+| Push config create/list/delete | PASS | PASS |
+| Push webhook delivery as a `StreamResponse` envelope | not run (the Node agent's sender was not exercised) | PASS |
+| 75s stream silent except 15s keep-alives, read by Node's undici SSE parser (previously only Python) | n/a | PASS (75.1s) |
+
+Not run: the Claude-backed mode of the Node agent. No `ANTHROPIC_API_KEY` was available in this session, so every Node
+result above used the deterministic stub (the artifact text starts with `[stub]`, `[claude]` when the model answers).
+
+### Go: `a2a-go` v2.6.0 (`interop/go-agent`, run with `run_go_checks.sh`)
+
+`a2a-go` module `github.com/a2aproject/a2a-go/v2` v2.6.0 (`a2a.Version == "1.0"`); server via `a2asrv.NewRESTHandler`, client
+via `a2aclient.WithRESTTransport` with defaults disabled (REST only). Same behaviour contract as the Node agent; `bal-client-node`
+is reused against it. As with Node, the Claude-backed mode was not run (no key yet), so these used the `[stub]` responder.
+
+| Scenario | G-A: our client -> Go agent | G-C: Go client -> our listener |
+|---|---|---|
+| Card discovery / REST negotiation | PASS | PASS |
+| Blocking send (Task+artifact), direct Message | PASS | PASS (Task) |
+| Streaming send | PASS | PASS |
+| Multi-turn INPUT_REQUIRED -> COMPLETED, same task id | PASS | PASS |
+| `returnImmediately`, subscribe / cancel a running task | PASS (CANCELED) | PASS (subscribe) |
+| Typed errors TaskNotFound / TaskNotCancelable | PASS | **FAIL, finding 25** |
+| `getTask` `historyLength` | PASS | PASS |
+| `ListTasks` pageSize, status, `historyLength`, `statusTimestampAfter` (past) | PASS | PASS |
+| `ListTasks` `statusTimestampAfter` (future, empty result) | **FAIL, finding 24** | PASS |
+| Push config CRUD; push webhook delivery | PASS; n/a | PASS; PASS |
+
+Harness notes: a2a-go scopes `ListTasks` to an authenticated owner, so the agent installs a `CallInterceptor` that sets a fixed user
+(without it `ListTasks` is `unauthenticated`); the Go client joins paths with `url.JoinPath`, so it copes with a trailing-slash card URL
+that broke ours (finding 21).
+
+**24. (Their deviation; our client is stricter than proto3 JSON allows) The Go server encodes an empty `ListTasks` result as
+`"tasks":null`.** Seen with `curl` (`{"tasks":null,"totalSize":0,...}`), from Go's nil slice under a non-`omitempty` tag. Our
+`HttpClient.listTasks` then fails with `ListTasks response did not match the expected shape: ConversionError`. The spec models `tasks`
+as a repeated (always-present) field, so the Go output is sloppy, but proto3 JSON says `null` means the field default, and the Node SDK's
+decoder accepts it. A client that talks to more than one SDK should treat `null` for a repeated field as empty. **Not fixed.**
+
+**25. (SDK divergence from the live spec; not our bug, but it defeats our error mapping) The Go client turns every error from our
+listener into a generic `server error`.** `a2a-go` `internal/rest/rest.go` `FromRESTError` returns `a2a.ErrServerError` unless
+`Content-Type` starts with `application/json`; our listener (following the live spec, which uses `application/a2a+json` throughout)
+answers `application/a2a+json`, so the `google.rpc.Status`/`ErrorInfo` body is never decoded and `errors.Is(err, a2a.ErrTaskNotFound)` is
+false. The Go server itself emits plain `application/json`. Same disagreement as the two TCK failures `HTTP_JSON-ERR-001`/`SVC-001`.
+Options: report upstream to a2a-go, or have the listener content-negotiate (answer `application/json` when the request's `Accept`
+lists only that; the Go client sends `Accept: application/json`). **Not changed**; needs a decision.
+
+**21. (Defect, ours; found by the Node agent) `HttpClient` builds `//message:send` when the card's interface URL ends in
+`/`, and the server answers 404.** `@a2a-js/sdk` advertises `http://localhost:9800/` for a root-mounted agent. Every
+operation from `a2a:HttpClient` then failed with `REST request failed with HTTP 404` (`curl` confirms `//message:send` is
+404, `/message:send` is 200). The reference `@a2a-js/sdk` client, given the same card, works. `http_client.bal` passes
+the URL straight to `http:Client` and appends paths that start with `/`. A root-mounted agent is the common case, so this
+would hit real users. Proposed fix: strip trailing `/` from the interface URL when building the client. Workaround used
+in the rig: `TRAILING_SLASH=0`. **Not fixed**; needs a decision on whether to amend `c167fe3` or add a new commit.
+
+**22. (Defect, ours; root cause of a "pre-existing" TCK failure) `message:send` ignores `configuration.historyLength`.**
+TCK `CORE-HIST-003` ("SendMessage with historyLength=0 returned 2 history message(s), expected none") has failed since
+the 88/4 baseline. Reproduced without the TCK: `POST /message:send` with `configuration.historyLength: 0` returns
+`history` of length 1 from our listener and no `history` key from the Node agent; `historyLength: 1` returns 1 from both.
+Spec 3.2.4: "0: No history should be returned; the `history` field SHOULD be omitted". In the library, only `getTask`
+(`default_handler.bal:692`) and `listTasks` (`task_store.bal:284`) trim history; `sendMessage` never reads
+`configuration.historyLength`. **Not fixed.** That leaves 3 of the 4 TCK failures: `CARD-CACHE-003` (optional
+`Last-Modified` on the card), and `HTTP_JSON-ERR-001` / `HTTP_JSON-SVC-001` (the TCK's stale snapshot expects
+`application/json`; our `application/a2a+json` matches the live spec and is now accepted by current Java too).
+
+**23. (Positive) The Node SDK's REST server and client interoperate with this library in both directions with no
+config workarounds** other than the trailing-slash issue (21); `ListTasks` `historyLength`/`statusTimestampAfter`, listed as
+untested, now pass against two independent implementations' worth of semantics (Node server via our client, our server
+via the Node client).
+
+## Session of 2026-09-30: the A2A low-code toolkit (`a2a-ai-toolkit`), client and server, in a real BI project
+
+Separate track from the sessions above: not the library's own protocol conformance, but whether
+`ballerina/a2a` is usable the way `ballerina/mcp` already is from WSO2 Integrator (BI) -- a
+client toolkit an `ai:Agent` can hold (`A2aToolKit`, mirroring `ai:McpToolKit`) and a server-side
+helper that turns an `ai:Agent` into an A2A agent (`runAgent`, new this session -- MCP has no
+equivalent, since MCP never exposes an agent, only functions as tools). Full detail, including
+what BI's actual low-code *tiles* still need (deliberately out of scope this round) and where
+their MCP equivalents live in the tooling, is in `a2a-ai-toolkit/BI_LOWCODE_NOTES.md`.
+
+`A2aToolKit` was rebuilt from scratch this session (the prototype and its `ai:McpBaseToolKit`-style
+port had both drifted onto the dead 0.2.1 client API) and `runAgent` is new. Both are unit-tested in
+`a2a-ai-toolkit` -- 15 tests, 3 of them real calls to the Anthropic API (Claude Haiku 4.5), not a
+hand-built fake -- and then exercised together in a real BI workspace
+(`~/WSO2Integrator/wso2-integrator-a2a`): the existing demo client package (`a2ademoassistant`, its
+~250 lines of hand-rolled JSON-RPC glue replaced by one `A2aToolKit` instance) and a new server
+package (`tripplanneragent`) whose entire `onMessage` is one call to `runAgent` -- exactly the shape
+a low-code "A2A Service" tile would generate.
+
+**Cross-language confirmation**: the real Python `a2a-sdk` client
+(`interop/python-client/driver_llm.py`, unmodified except for the port argument) driven against
+`tripplanneragent`, live:
+
+| Check | Result |
+|---|---|
+| Card discovery | PASS |
+| Turn 1, no city named -> `INPUT_REQUIRED` | PASS -- agent asked "Which city would you like to visit for your day trip?" |
+| Turn 2 ("Milan"), same task id | PASS |
+| Turn 2 completes with an on-topic itinerary | PASS -- real Claude Haiku 4.5 output, mentions Milan |
+| Exactly one task existed on the server after both turns | PASS |
+
+`OVERALL: PASS`. So a low-code-shaped server built from this toolkit's `runAgent` genuinely
+interoperates with a real other-language client, not only with this library's own client.
+
 ## What this covers, and what it doesn't
 
 - Confirms the highest-value slice of Part 1: card discovery, blocking send with an
   artifact, task-not-found, task-not-cancelable, and raw bytes -- against a **real** SDK
   client and a **real** SDK server, both built on the actual `a2a-sdk` 1.1.5 API (not a
   stand-in). This is the first evidence of that kind for this library.
-- Still not covered: `ListTasks` `historyLength`/`statusTimestampAfter`; the Java side of streaming/push/multi-turn
-  (pair D exercised only card discovery and one streaming send; pair B only `sendMessage`/`getTask` because the
-  hello-world agent has no tasks); a 70s+ silent stream against a foreign parser; other identity providers (Auth0,
+- Still not covered: the Java side of push/multi-turn (pair D now covers discovery and streaming; pair B only
+  `sendMessage`/`getTask`); Claude-backed Node and Go agents (need an API key); other identity providers (Auth0,
   Entra) and their quirks; the interactive authorization-code redirect handled *by this library* (the client only
   consumes the resulting refresh token; there is no code-flow support to test); token exchange / delegation (finding
   19); **X-A4** (blocked: the Java security sample needs an LLM key as well as Keycloak); API-key server auth (not built);
