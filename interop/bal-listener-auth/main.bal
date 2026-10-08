@@ -41,7 +41,9 @@ a2a:AgentCard card = {
     supportedInterfaces: []
 };
 
-listener a2a:Listener l = new (PORT, agentCard = card,
+final a2a:DefaultHandler handler = new (card);
+
+listener a2a:HttpListener l = new (PORT, handler,
     auth = [{jwtValidatorConfig: {issuer: "interop", audience: "a2a", signatureConfig: {secret: sharedSecret}}}]
 );
 

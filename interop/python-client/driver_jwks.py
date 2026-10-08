@@ -159,7 +159,7 @@ try:
     check("startup fails with the typed error naming the auth entry",
           "ListenerConfiguration.auth[0] (jwtValidatorConfig) could not be initialised" in log,
           next((ln for ln in log.splitlines() if ln.strip()), "")[:160])
-    check("it is a returned error, not an uncaught panic through a2a:Listener's init",
+    check("it is a returned error, not an uncaught panic through a2a:HttpListener's init",
           "ballerina.a2a.0.Listener:init" not in log)
 finally:
     for p in list(procs):

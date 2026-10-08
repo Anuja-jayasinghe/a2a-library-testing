@@ -106,14 +106,18 @@ a2a:AgentCard card = {
     supportedInterfaces: []
 };
 
-listener a2a:Listener l = new (PORT, agentCard = card, auth = [{
+final a2a:DefaultHandler handler = new (card);
+
+listener a2a:HttpListener l = new (PORT, handler,
+    auth = [{
     jwtValidatorConfig: {
         issuer,
         audience: "a2a",
         signatureConfig: {jwksConfig: cacheJwks ? {url: jwksUrl, cacheConfig: {capacity: 10, defaultMaxAge: jwksMaxAge}} : {url: jwksUrl}}
     },
     scopes: requiredScope
-}]);
+}]
+);
 
 public function main() returns error? {
     check l.attach(new IdpAgent());

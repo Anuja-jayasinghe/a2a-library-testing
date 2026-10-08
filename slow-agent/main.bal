@@ -24,14 +24,13 @@ configurable int agentPort = 9098;
 configurable int steps = 7;
 configurable decimal stepSeconds = 10;
 configurable decimal silentSeconds = 70;
-// The HTTP listener's own idle timeout (Ballerina's default is 60s). It only
-// takes effect through a pre-built http:Listener: a2a:Listener ignores the
-// http:ListenerConfiguration fields when given a bare port.
+// The HTTP listener's own idle timeout (Ballerina's default is 60s), applied
+// here through a pre-built http:Listener.
 configurable decimal listenerTimeout = 60;
 
 final http:Listener slowHttp = check new (agentPort, timeout = listenerTimeout);
 
-listener a2a:Listener slowListener = new (slowHttp, agentCard = {
+final a2a:DefaultHandler slowHandler = new ({
     name: "Slow Worker",
     description: "Deterministic agent whose tasks run for over a minute",
     version: "1.0.0",
@@ -49,6 +48,8 @@ listener a2a:Listener slowListener = new (slowHttp, agentCard = {
     capabilities: {},
     supportedInterfaces: []
 }, pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
+
+listener a2a:HttpListener slowListener = new (slowHttp, slowHandler);
 
 public function main() returns error? {
     check slowListener.attach(new SlowWorkerService());

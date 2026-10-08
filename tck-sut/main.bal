@@ -59,16 +59,18 @@ isolated function buildCard(a2a:AgentSkill[] skills) returns a2a:AgentCard => {
     supportedInterfaces: []
 };
 
-listener a2a:Listener tckListener = new (agentPort,
-    agentCard = buildCard([tckSkill]),
+// validateUrl: false so push notifications can reach the TCK's own webhook
+// receiver on localhost, which the default SSRF guard would refuse.
+final a2a:DefaultHandler tckHandler = new (buildCard([tckSkill]),
     extendedAgentCard = extendedCard
         ? buildCard([tckSkill, {id: "tck-extended", name: "TCK Extended", description: "Only in the extended card", tags: ["tck"]}])
         : (),
     streamingCapability = streaming,
     pushNotificationsCapability = pushNotifications,
-    pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
-// validateUrl: false so push notifications can reach the TCK's own webhook
-// receiver on localhost, which the default SSRF guard would refuse.
+    pushSender = new a2a:HttpPushNotificationSender({validateUrl: false})
+);
+
+listener a2a:HttpListener tckListener = new (agentPort, tckHandler);
 
 public function main() returns error? {
     check tckListener.attach(new TckAgentService());

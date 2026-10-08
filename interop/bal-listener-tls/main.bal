@@ -38,8 +38,12 @@ http:ListenerSecureSocket tlsConfig = mutualTls
        mutualSsl: {verifyClient: http:REQUIRE, cert: certDir + "/ca.pem"}}
     : {key: {certFile: certDir + "/server.pem", keyFile: certDir + "/server.p8.key"}};
 
-listener a2a:Listener l = new (PORT, agentCard = card, secureSocket = tlsConfig,
-    publicUrl = PUBLIC_URL == "" ? () : PUBLIC_URL);
+final a2a:DefaultHandler handler = new (card);
+
+listener a2a:HttpListener l = new (PORT, handler,
+    secureSocket = tlsConfig,
+    publicUrl = PUBLIC_URL == "" ? () : PUBLIC_URL
+);
 
 public function main() returns error? {
     check l.attach(new InteropAgent());

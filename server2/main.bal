@@ -36,7 +36,7 @@ question before producing a packing list once you know enough.`
     model = claudeModel
 );
 
-listener a2a:Listener packingAgentListener = new (agentPort, agentCard = {
+final a2a:DefaultHandler packingAgentHandler = new ({
     name: "Packing Assistant Agent",
     description: "A Claude-backed agent that suggests a short packing list for a trip",
     version: "1.0.0",
@@ -54,6 +54,8 @@ listener a2a:Listener packingAgentListener = new (agentPort, agentCard = {
     capabilities: {},
     supportedInterfaces: []
 }, pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
+
+listener a2a:HttpListener packingAgentListener = new (agentPort, packingAgentHandler);
 // validateUrl: false -- see server/main.bal's identical note; this demo's
 // webhook receiver runs at http://localhost, a loopback address the default
 // SSRF guard otherwise rejects.

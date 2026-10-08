@@ -73,8 +73,9 @@ a2a:AgentCard card = {
     supportedInterfaces: []
 };
 
-listener a2a:Listener l = new (PORT, agentCard = card, keepAliveInterval = KEEPALIVE_SECONDS,
-    pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
+final a2a:DefaultHandler handler = new (card, pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
+
+listener a2a:HttpListener l = new (PORT, handler, keepAliveInterval = KEEPALIVE_SECONDS);
 // validateUrl: false because the interop push receiver runs on localhost,
 // which the default SSRF guard (specification section 13.2) rejects; a real
 // deployment leaves that guard on.

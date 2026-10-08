@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Raw-HTTP spec probes against an a2a:Listener (bal-listener). Prints observed behaviour; expectations
+"""Raw-HTTP spec probes against an a2a:HttpListener (bal-listener). Prints observed behaviour; expectations
 are recorded next to each probe with the spec section that justifies them. Usage: probe.py PORT"""
 import http.client, json, sys, uuid
 

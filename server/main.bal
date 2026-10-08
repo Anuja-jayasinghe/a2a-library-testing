@@ -45,7 +45,7 @@ question before producing an itinerary once a destination is known.`
     model = claudeModel
 );
 
-listener a2a:Listener demoAgentListener = new (agentPort, agentCard = {
+final a2a:DefaultHandler demoAgentHandler = new ({
     name: "Trip Planner Agent",
     description: "A Claude-backed agent that plans short, one-day trip itineraries",
     version: "1.0.0",
@@ -66,9 +66,12 @@ listener a2a:Listener demoAgentListener = new (agentPort, agentCard = {
     // pushNotificationsCapability to withhold either deliberately.
     capabilities: {},
     supportedInterfaces: []
-}, pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}),
+}, pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
+
+listener a2a:HttpListener demoAgentListener = new (agentPort, demoAgentHandler,
     auth = authSecret == "" ? () : [{jwtValidatorConfig: {issuer: "interop", audience: "a2a",
-        signatureConfig: {secret: authSecret}}}]);
+        signatureConfig: {secret: authSecret}}}]
+);
 // validateUrl: false is because this demo's client-side webhook receiver
 // runs at http://localhost -- a loopback address the default SSRF guard
 // (specification section 13.2) otherwise rejects before ever connecting.
