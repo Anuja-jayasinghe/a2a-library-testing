@@ -15,6 +15,9 @@ with `ballerina/a2a`, `ballerina/ai` and `ballerinax/ai.anthropic`.
 | `client`  | Traveler agent using `ai:A2aToolKit`; you chat with it in a prompt | 9096 (webhook receiver) |
 | `tck-sut` | Deterministic agent (no LLM, no API key) for the A2A TCK          | 9999 |
 
+For small client and server API examples across JavaScript, Python, Java,
+Rust, Go, .NET, and Ballerina, see [SDK signatures at a glance](examples/README.md).
+
 ## Prerequisites
 
 - Ballerina 2201.13.5
