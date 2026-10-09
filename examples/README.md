@@ -320,7 +320,9 @@ public function main() returns error? {
 }
 ```
 
-**Server** — implement `a2a:Service.onMessage`, then attach it to a listener:
+**Server** — implement `a2a:Service.onMessage`, then attach it to an
+`a2a:HttpListener` for HTTP+JSON (REST). The handler and listener settings below
+match the capability flags and interface URL shown in the card:
 
 ```ballerina
 import ballerina/a2a;
@@ -330,21 +332,57 @@ isolated service class HelloAgent {
 
     isolated remote function onMessage(a2a:RequestContext context, a2a:TaskUpdater updater)
             returns a2a:Message|a2a:Error? {
-        return {messageId: "reply-1", role: a2a:ROLE_AGENT,
-            parts: [{text: "Hello from Ballerina"}]};
+        return {
+            messageId: "reply-1",
+            role: a2a:ROLE_AGENT,
+            parts: [{text: "Hello from Ballerina"}]
+        };
     }
 }
 
 a2a:AgentCard card = {
-    name: "Hello Agent", description: "Replies to a greeting", version: "1.0.0",
-    skills: [{id: "hello", name: "Hello", description: "Replies to a greeting", tags: ["hello"]}],
-    defaultInputModes: ["text"], defaultOutputModes: ["text"],
-    capabilities: {}, supportedInterfaces: []
+    name: "Hello Agent",
+    description: "Replies to a greeting",
+    version: "1.0.0",
+    skills: [{
+        id: "hello",
+        name: "Hello",
+        description: "Replies to a greeting",
+        tags: ["hello"]
+    }],
+    defaultInputModes: ["text"],
+    defaultOutputModes: ["text"],
+    capabilities: {
+        streaming: true,
+        pushNotifications: true,
+        extendedAgentCard: false,
+        extensions: []
+    },
+    supportedInterfaces: [{
+        url: "http://localhost:9611",
+        protocolBinding: "HTTP+JSON",
+        protocolVersion: "1.0"
+    }]
 };
-final a2a:DefaultHandler handler = new (card);
-listener a2a:HttpListener agent = new (9611, handler);
+final a2a:DefaultHandler handler = new (
+    card,
+    streamingCapability = true,
+    pushNotificationsCapability = true
+);
+
+// HttpListener serves A2A over HTTP+JSON (REST).
+listener a2a:HttpListener restListener = new (
+    9611,
+    handler,
+    publicUrl = "http://localhost:9611"
+);
 
 public function main() returns error? {
-    check agent.attach(new HelloAgent());
+    check restListener.attach(new HelloAgent());
 }
 ```
+
+The listener derives the **served** `capabilities` and `supportedInterfaces`
+from its configuration; the values above show what this local example
+advertises. Change `publicUrl` to the address clients actually use when the
+agent is deployed behind a proxy or gateway.
