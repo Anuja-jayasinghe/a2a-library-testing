@@ -1,7 +1,7 @@
 // A ballerina/a2a listener protected by a REAL identity provider (Keycloak, ../keycloak),
 // used for the identity-provider and AUTH_REQUIRED checks:
 //   * tokens are validated against Keycloak's published JWKS (issuer, audience, scope);
-//   * `idp-whoami`        answers with the caller identity the library derived (`context.owner`);
+//   * `idp-whoami`        answers with the caller identity the library derived (`context?.owner`);
 //   * `idp-auth-required` pauses the task in TASK_STATE_AUTH_REQUIRED (spec 7.6); any other
 //                         message on that task completes it, echoing a credential sent back;
 //   * `idp-chain`         is an agent that calls a second agent, as its own service identity.
@@ -41,7 +41,7 @@ isolated service class IdpAgent {
             returns a2a:Message|a2a:Error? {
         string id = context.message.messageId;
         string text = textOfParts(context.message.parts);
-        string owner = context.owner ?: "(none)";
+        string owner = context?.owner ?: "(none)";
 
         if id.startsWith("idp-whoami") {
             check updater->working();
