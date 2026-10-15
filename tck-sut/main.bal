@@ -1,5 +1,5 @@
 // A deterministic (no LLM) A2A agent for the A2A Technology Compatibility
-// Kit (TCK), built on ballerina/a2a's Listener.
+// Kit (TCK), built on ballerina/a2a's RestListener.
 //
 // The TCK drives a System Under Test through a fixed contract: what the
 // agent does depends only on a prefix of the incoming message's messageId
@@ -36,7 +36,7 @@ configurable boolean requiredExtension = false;
 
 const string REQUIRED_EXTENSION_URI = "urn:a2a:tck:required-extension";
 
-final a2a:AgentSkill tckSkill = {
+final a2a:AgentSkill & readonly tckSkill = {
     id: "tck",
     name: "TCK Conformance",
     description: "Handles TCK conformance test messages",
@@ -61,28 +61,157 @@ isolated function buildCard(a2a:AgentSkill[] skills) returns a2a:AgentCard => {
 
 // validateUrl: false so push notifications can reach the TCK's own webhook
 // receiver on localhost, which the default SSRF guard would refuse.
-final a2a:DefaultHandler tckHandler = new (buildCard([tckSkill]),
+final a2a:DefaultHandler tckHandler = new (new TckAgentExecutor(),
     extendedAgentCard = extendedCard
         ? buildCard([tckSkill, {id: "tck-extended", name: "TCK Extended", description: "Only in the extended card", tags: ["tck"]}])
         : (),
-    streamingCapability = streaming,
-    pushNotificationsCapability = pushNotifications,
     pushSender = new a2a:HttpPushNotificationSender({validateUrl: false})
 );
 
-listener a2a:HttpListener tckListener = new (agentPort, tckHandler);
+// The extended agent card MUST require authentication (specification section
+// 13.3), and a2a:RestListener refuses to serve it without `auth`. The TCK sends
+// no credentials, so in the extended configuration it is run against the
+// extended-card tests only (see run_tck.sh). A file user store with no users
+// is enough: every caller is challenged.
+listener a2a:RestListener tckListener = new (agentPort,
+    auth = extendedCard ? [{fileUserStoreConfig: {}}] : ()
+);
 
 public function main() returns error? {
-    check tckListener.attach(new TckAgentService());
+    if extendedCard {
+        check tckListener.attach(new TckExtendedService(tckHandler));
+    } else if streaming && pushNotifications {
+        check tckListener.attach(new TckFullService(tckHandler));
+    } else {
+        check tckListener.attach(new TckBaseService(tckHandler));
+    }
     check tckListener.'start();
     io:println(string `Ballerina A2A TCK SUT listening on http://localhost:${agentPort}`);
     io:println("Press Ctrl+C to stop.");
 }
 
-isolated service class TckAgentService {
+// The listener derives the advertised capabilities from the resources a
+// service defines, so each configuration is its own service class.
+isolated service class TckBaseService {
     *a2a:Service;
+    private final a2a:DefaultHandler handler;
 
-    isolated remote function onMessage(a2a:RequestContext context, a2a:TaskUpdater updater)
+    isolated function init(a2a:DefaultHandler handler) {
+        self.handler = handler;
+    }
+
+    isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error => buildCard([tckSkill]);
+
+    isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
+            returns a2a:Task|a2a:Message|a2a:Error => self.handler.sendMessage(context, request);
+
+    isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
+            returns a2a:Task|a2a:Error => self.handler.getTask(context, request);
+
+    isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
+            returns a2a:ListTasksResponse|a2a:Error => self.handler.listTasks(context, request);
+
+    isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
+            returns a2a:Task|a2a:Error => self.handler.cancelTask(context, request);
+}
+
+isolated service class TckFullService {
+    *a2a:Service;
+    private final a2a:DefaultHandler handler;
+
+    isolated function init(a2a:DefaultHandler handler) {
+        self.handler = handler;
+    }
+
+    isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error => buildCard([tckSkill]);
+
+    isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
+            returns a2a:Task|a2a:Message|a2a:Error => self.handler.sendMessage(context, request);
+
+    isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.sendStreamingMessage(context, request);
+
+    isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.subscribeToTask(context, request);
+
+    isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
+            returns a2a:Task|a2a:Error => self.handler.getTask(context, request);
+
+    isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
+            returns a2a:ListTasksResponse|a2a:Error => self.handler.listTasks(context, request);
+
+    isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
+            returns a2a:Task|a2a:Error => self.handler.cancelTask(context, request);
+
+    isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context,
+            a2a:TaskPushNotificationConfig request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
+        self.handler.createTaskPushNotificationConfig(context, request);
+
+    isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
+            a2a:GetTaskPushNotificationConfigRequest request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
+        self.handler.getTaskPushNotificationConfig(context, request);
+
+    isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context,
+            a2a:ListTaskPushNotificationConfigsRequest request) returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error =>
+        self.handler.listTaskPushNotificationConfigs(context, request);
+
+    isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
+            a2a:DeleteTaskPushNotificationConfigRequest request) returns a2a:Error? =>
+        self.handler.deleteTaskPushNotificationConfig(context, request);
+}
+
+isolated service class TckExtendedService {
+    *a2a:Service;
+    private final a2a:DefaultHandler handler;
+
+    isolated function init(a2a:DefaultHandler handler) {
+        self.handler = handler;
+    }
+
+    isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error => buildCard([tckSkill]);
+
+    isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
+            returns a2a:Task|a2a:Message|a2a:Error => self.handler.sendMessage(context, request);
+
+    isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.sendStreamingMessage(context, request);
+
+    isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.subscribeToTask(context, request);
+
+    isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
+            returns a2a:Task|a2a:Error => self.handler.getTask(context, request);
+
+    isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
+            returns a2a:ListTasksResponse|a2a:Error => self.handler.listTasks(context, request);
+
+    isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
+            returns a2a:Task|a2a:Error => self.handler.cancelTask(context, request);
+
+    isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context,
+            a2a:TaskPushNotificationConfig request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
+        self.handler.createTaskPushNotificationConfig(context, request);
+
+    isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
+            a2a:GetTaskPushNotificationConfigRequest request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
+        self.handler.getTaskPushNotificationConfig(context, request);
+
+    isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context,
+            a2a:ListTaskPushNotificationConfigsRequest request) returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error =>
+        self.handler.listTaskPushNotificationConfigs(context, request);
+
+    isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
+            a2a:DeleteTaskPushNotificationConfigRequest request) returns a2a:Error? =>
+        self.handler.deleteTaskPushNotificationConfig(context, request);
+
+    isolated resource function get extendedAgentCard(a2a:Context context, a2a:GetExtendedAgentCardRequest request)
+            returns a2a:AgentCard|a2a:Error => self.handler.getExtendedAgentCard(context, request);
+}
+
+isolated class TckAgentExecutor {
+    *a2a:AgentExecutor;
+
+    public isolated function execute(a2a:RequestContext context, a2a:TaskUpdater updater)
             returns a2a:Message|a2a:Error? {
         string id = context.message.messageId;
 

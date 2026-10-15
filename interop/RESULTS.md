@@ -722,3 +722,73 @@ tests check.
   as a2a-go #447. Against our `application/a2a+json` errors, every 400 becomes `InvalidRequest` and only 404 comes out right, by
   coincidence. Its reason table also lacks `INVALID_PARAMS` and the other JSON-RPC-range reasons.
 - Known upstream: no push notifications (#504). The NuGet 1.0.0-preview2 release is about six months behind `main`.
+
+## Session of 2026-10-15: the resource-based service on `a2a:RestListener` (`feat/rest-listener`)
+
+`module-ballerina-a2a` `feat/rest-listener` at `39856a9` replaces `a2a:HttpListener` and the `remote on*` operations with
+`a2a:RestListener` and one `resource` function per HTTP+JSON route. Every Ballerina listener here was migrated to that shape
+(`tck-sut`, `bal-listener`, `-auth`, `-tls`, `-oidc`, `-idp`, `server`, `server2`, `slow-agent`), and the whole grid re-run.
+
+The library was built from a clean `git archive` of `39856a9`, not the shared checkout, with the native jar compiled from that
+commit's own sources (it contains `ResourceInvoker.class`, and so does the packed bala). Another session pushed a different build
+of `ballerina/a2a` 0.1.0 to the shared local repository mid-run, so the LLM-backed runs were repeated with
+`BALLERINA_HOME_DIR` pointing at an isolated home that holds only this branch's bala (Central cache shared by symlink).
+
+### References used
+
+| Library | Version |
+|---|---|
+| `a2a-sdk` (Python) | 1.1.5 |
+| `@a2a-js/sdk` | 1.2.1 |
+| `a2a-java` | 1.4.1.Final-SNAPSHOT (local build) |
+| `a2a-go` | v2.6.0 |
+| A2A TCK | `263b9cf` (HTTP+JSON only) |
+
+### Results
+
+| Check | Result |
+|---|---|
+| `bal test` in the module (clean export) | 512 passing, 0 failing |
+| TCK default | 88 passed, 5 failed (4 requirements): `CARD-CACHE-003`, `HTTP_JSON-ERR-001`, `HTTP_JSON-SVC-001` (known), and `CORE-CANCEL-002`, see finding 43 |
+| TCK no-capabilities | 70 passed, the same 5 failed. The listener attached only the five base operations, and the card withholds streaming and push |
+| TCK extended | Starts now (finding 42): `auth` is a file user store with no users, run with `-k extended_card`. 7 skipped, as the probe sees the 401 challenge |
+| TCK extension | 1 passed |
+| Pair C (Python client -> `bal-listener`), `run_extended.sh` both directions | PASS, incl. I12 push as a `StreamResponse`, I13 keep-alive, tenancy, malformed body |
+| Pair A | PASS. Its one "webhook NOT delivered" is the script: `run_pair_a_c.sh` starts no receiver on 19870 (`run_extended.sh` does) |
+| Pair B / D (Java) | Unchanged: D gets `TaskEvent` + 3 updates and is stopped by its alarm, as the script expects |
+| Go G-A / G-C | G-A PASS. G-C: only the 2 known finding-25 failures |
+| Node N-A / N-C, J-D `StreamDriver` | PASS |
+| `run_client_checks.sh` | PASS once `bal-client-tls` expects the `/rest` interface URL (finding 44) |
+| `run_more_checks.sh`, `run_pair_x_a.sh` (X-A1, X-A2, X-A3) | PASS |
+| `run_idp_checks.sh` (Keycloak) | PASS, 59 checks: audience, scope, `sub`, per-user task isolation, OIDC discovery, key rotation and withdrawal, AUTH_REQUIRED |
+| `run_llm_checks.sh` | PASS: Python client two-turn on one task; Traveler duplicate-task regression (1 task); two agents, honest cancel failure; 40s task |
+| Trip Planner / Packing Assistant / Traveler, the README's 8 prompts | PASS, incl. the webhook receiving the Kyoto task's push |
+| `a2a-ai-toolkit` `bal test` | 14 passing |
+| `a2a-interop-tests` `bal test`, with the real Claude-backed dice agent on HTTP+JSON | 16 passing; `testDiceAgentSendMessageRest` completed |
+| Operations Desk (`multi-agent-a2a-demo`), the README's 8 prompts | PASS (second run 8/8; the first run's prompt 2 hit an Anthropic API idle timeout inside the chat agent, not A2A) |
+
+The `:action` routes were probed directly: `tasks/{id}:cancel` and `:subscribe` reach the operation with a literal colon, `%3A`,
+`%3a` and a trailing slash; `tasks/{id}/cancel` is 404, as it should be. No listener log in any of these runs contains
+`response has already been sent`; the module's own suite logs it twice, from the listener-timeout test, where the HTTP layer has
+already answered.
+
+### Findings
+
+**43. (Spec gap, TCK newly strict) `TaskNotCancelableError` is 400; the spec's table says 409.** TCK `de6af18` ("assert the
+specific spec-mandated error") made `CORE-CANCEL-002` check the status, so it now fails. Not a `feat/rest-listener` regression:
+`server_errors.bal` has returned 400 on purpose since earlier commits, its comment citing `a2a-sdk`, `a2a-go` and `@a2a-js/sdk`.
+The spec's section 5.4 table and 11.6 say 409 (`ContentTypeNotSupportedError` 415, `InvalidAgentResponseError` 502). Worth
+deciding whether to follow the spec now that the TCK enforces it.
+
+**44. (Rig) `bal-client-tls` expected the interface URL without `/rest`.** The served card's HTTP+JSON interface is the listener's
+address plus `/rest`, as the module README says. The three checks that compared against the bare address (and the mutual-TLS
+send that overwrote the card's URL with it) now include `/rest`.
+
+**45. (Rig) Re-pushing `ballerina/a2a` at the same version leaves dependents' compiled caches stale.** The Traveler client
+failed with `NoClassDefFoundError: ballerina/a2a/0/identifiers/global_vars/$resolveAgentCard_clientConfig` from
+`A2aToolKit.init`, although its `target` was rebuilt: `~/.ballerina/repositories/local/cache-2201.13.5/ballerina/ai` was
+compiled against an older `a2a` and is not invalidated when `a2a` 0.1.0 is replaced. Clear that cache directory (or use a fresh
+`BALLERINA_HOME_DIR`) after each re-push.
+
+Not covered this session: Rust and .NET (no `cargo` or `dotnet` on this machine), and the GraalVM native-image build (no
+`native-image` installed).

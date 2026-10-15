@@ -45,7 +45,7 @@ question before producing an itinerary once a destination is known.`
     model = claudeModel
 );
 
-final a2a:DefaultHandler demoAgentHandler = new ({
+final a2a:AgentCard demoAgentHandlerCard = {
     name: "Trip Planner Agent",
     description: "A Claude-backed agent that plans short, one-day trip itineraries",
     version: "1.0.0",
@@ -66,12 +66,12 @@ final a2a:DefaultHandler demoAgentHandler = new ({
     // pushNotificationsCapability to withhold either deliberately.
     capabilities: {},
     supportedInterfaces: []
-}, pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
+};
 
-listener a2a:HttpListener demoAgentListener = new (agentPort, demoAgentHandler,
-    auth = authSecret == "" ? () : [{jwtValidatorConfig: {issuer: "interop", audience: "a2a",
-        signatureConfig: {secret: authSecret}}}]
-);
+final a2a:DefaultHandler demoAgentHandler = new (new TripPlannerAgentExecutor(), pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
+
+listener a2a:RestListener demoAgentListener = new (agentPort, auth = authSecret == "" ? () : [{jwtValidatorConfig: {issuer: "interop", audience: "a2a",
+        signatureConfig: {secret: authSecret}}}]);
 // validateUrl: false is because this demo's client-side webhook receiver
 // runs at http://localhost -- a loopback address the default SSRF guard
 // (specification section 13.2) otherwise rejects before ever connecting.
@@ -79,17 +79,17 @@ listener a2a:HttpListener demoAgentListener = new (agentPort, demoAgentHandler,
 // public hosts.
 
 public function main() returns error? {
-    check demoAgentListener.attach(new TripPlannerAgentService());
+    check demoAgentListener.attach(new AgentOperations(demoAgentHandler, demoAgentHandlerCard));
     check demoAgentListener.'start();
     io:println(string `Trip Planner Agent (Claude-backed) listening on http://localhost:${agentPort}`);
     io:println("Run the client package (in a separate terminal) to drive it through the full A2A lifecycle.");
     io:println("Press Ctrl+C to stop.");
 }
 
-isolated service class TripPlannerAgentService {
-    *a2a:Service;
+isolated class TripPlannerAgentExecutor {
+    *a2a:AgentExecutor;
 
-    isolated remote function onMessage(a2a:RequestContext context, a2a:TaskUpdater updater)
+    public isolated function execute(a2a:RequestContext context, a2a:TaskUpdater updater)
             returns a2a:Message|a2a:Error? {
         check updater->working();
 
@@ -150,4 +150,70 @@ isolated function extractText(a2a:Message message) returns string {
         }
     }
     return text;
+}
+
+isolated service class AgentOperations {
+    *a2a:Service;
+
+    private final a2a:DefaultHandler handler;
+    private final a2a:AgentCard & readonly card;
+
+    isolated function init(a2a:DefaultHandler handler, a2a:AgentCard card) {
+        self.handler = handler;
+        self.card = card.cloneReadOnly();
+    }
+
+    isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error {
+        return self.card;
+    }
+
+    isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
+            returns a2a:Task|a2a:Message|a2a:Error {
+        return self.handler.sendMessage(context, request);
+    }
+
+    isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error {
+        return self.handler.sendStreamingMessage(context, request);
+    }
+
+    isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error {
+        return self.handler.subscribeToTask(context, request);
+    }
+
+    isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
+            returns a2a:Task|a2a:Error {
+        return self.handler.getTask(context, request);
+    }
+
+    isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
+            returns a2a:ListTasksResponse|a2a:Error {
+        return self.handler.listTasks(context, request);
+    }
+
+    isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
+            returns a2a:Task|a2a:Error {
+        return self.handler.cancelTask(context, request);
+    }
+
+    isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context, a2a:TaskPushNotificationConfig request)
+            returns a2a:TaskPushNotificationConfig|a2a:Error {
+        return self.handler.createTaskPushNotificationConfig(context, request);
+    }
+
+    isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context, a2a:GetTaskPushNotificationConfigRequest request)
+            returns a2a:TaskPushNotificationConfig|a2a:Error {
+        return self.handler.getTaskPushNotificationConfig(context, request);
+    }
+
+    isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context, a2a:ListTaskPushNotificationConfigsRequest request)
+            returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error {
+        return self.handler.listTaskPushNotificationConfigs(context, request);
+    }
+
+    isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context, a2a:DeleteTaskPushNotificationConfigRequest request)
+            returns a2a:Error? {
+        return self.handler.deleteTaskPushNotificationConfig(context, request);
+    }
 }
