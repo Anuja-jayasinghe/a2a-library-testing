@@ -320,31 +320,24 @@ public function main() returns error? {
 }
 ```
 
-**Server** — implement `a2a:Service.onMessage`, then attach it to a listener:
+**Server** — declare a service that defines the operations it supports as resource functions:
 
 ```ballerina
 import ballerina/a2a;
 
-isolated service class HelloAgent {
-    *a2a:Service;
-
-    isolated remote function onMessage(a2a:RequestContext context, a2a:TaskUpdater updater)
-            returns a2a:Message|a2a:Error? {
-        return {messageId: "reply-1", role: a2a:ROLE_AGENT,
-            parts: [{text: "Hello from Ballerina"}]};
+@a2a:ServiceConfig {
+    agentCard: {
+        name: "Hello Agent", description: "Replies to a greeting", version: "1.0.0",
+        skills: [{id: "hello", name: "Hello", description: "Replies to a greeting", tags: ["hello"]}],
+        defaultInputModes: ["text"], defaultOutputModes: ["text"],
+        capabilities: {}, supportedInterfaces: []
     }
 }
+isolated service on new a2a:RestListener(9611) {
 
-a2a:AgentCard card = {
-    name: "Hello Agent", description: "Replies to a greeting", version: "1.0.0",
-    skills: [{id: "hello", name: "Hello", description: "Replies to a greeting", tags: ["hello"]}],
-    defaultInputModes: ["text"], defaultOutputModes: ["text"],
-    capabilities: {}, supportedInterfaces: []
-};
-final a2a:DefaultHandler handler = new (card);
-listener a2a:HttpListener agent = new (9611, handler);
-
-public function main() returns error? {
-    check agent.attach(new HelloAgent());
+    isolated resource function post message\:send(a2a:SendMessageRequest request)
+            returns a2a:Task|a2a:Message|a2a:Error {
+        return {messageId: "reply-1", role: a2a:ROLE_AGENT, parts: [{text: "Hello from Ballerina"}]};
+    }
 }
 ```

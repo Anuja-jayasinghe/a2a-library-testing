@@ -10,7 +10,7 @@ HERE=$(cd "$(dirname "$0")/.." && pwd); PY="$HERE/interop/python-agent/.venv/bin
 kill_ports() { for p in "$@"; do lsof -ti :"$p" -sTCP:LISTEN 2>/dev/null | xargs -r kill 2>/dev/null || true; done; }
 trap 'kill_ports 9095 9097 9098' EXIT; kill_ports 9095 9097 9098
 up() { for _ in $(seq 1 60); do curl -sf "$1" >/dev/null && return 0; sleep 1; done; }
-tasks() { curl -s -H "A2A-Version: 1.0" localhost:"$1"/tasks | python3 -c "import json,sys;print(len(json.load(sys.stdin)['tasks']))"; }
+tasks() { curl -s -H "A2A-Version: 1.0" localhost:"$1"/rest/tasks | python3 -c "import json,sys;print(len(json.load(sys.stdin)['tasks']))"; }
 chat() { (cd "$HERE/client" && printf "$1" | java -jar target/bin/a2a_demo_client.jar "${@:2}" 2>&1 | sed -n '/^You:/,$p'); }
 for d in server server2 client; do (cd "$HERE/$d" && bal build >/dev/null 2>&1); done
 (cd "$HERE/server" && java -jar target/bin/a2a_demo_server.jar >/tmp/llm_planner.log 2>&1 &)

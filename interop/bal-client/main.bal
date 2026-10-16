@@ -179,7 +179,7 @@ public function main() returns error? {
     }
 
     io:println("== I15: malformed body -> 400, not 500 ==");
-    http:Client raw = check new (url);
+    http:Client raw = check new (card.supportedInterfaces[0].url);
     http:Response badJson = check raw->post("/message:send", "{not json",
             {"A2A-Version": "1.0", "Content-Type": "application/json"});
     io:println("malformed JSON status: ", badJson.statusCode, badJson.statusCode == 400 ? " (correct)" : " (WRONG)");
