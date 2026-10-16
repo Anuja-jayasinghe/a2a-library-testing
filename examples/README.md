@@ -320,17 +320,17 @@ public function main() returns error? {
 }
 ```
 
-**Server** — implement `a2a:Service.onMessage`, then attach it to an
-`a2a:HttpListener` for HTTP+JSON (REST). The handler and listener settings below
-match the capability flags and interface URL shown in the card:
+**Server** — declare a service on an `a2a:RestListener` (HTTP+JSON) that defines the
+operations it supports as resource functions. The agent's own logic is an
+`a2a:AgentExecutor`, run by an `a2a:DefaultHandler` the resources delegate to:
 
 ```ballerina
 import ballerina/a2a;
 
-isolated service class HelloAgent {
-    *a2a:Service;
+isolated class HelloExecutor {
+    *a2a:AgentExecutor;
 
-    isolated remote function onMessage(a2a:RequestContext context, a2a:TaskUpdater updater)
+    public isolated function execute(a2a:RequestContext context, a2a:TaskUpdater updater)
             returns a2a:Message|a2a:Error? {
         return {
             messageId: "reply-1",
@@ -340,49 +340,28 @@ isolated service class HelloAgent {
     }
 }
 
-a2a:AgentCard card = {
-    name: "Hello Agent",
-    description: "Replies to a greeting",
-    version: "1.0.0",
-    skills: [{
-        id: "hello",
-        name: "Hello",
+@a2a:ServiceConfig {
+    agentCard: {
+        name: "Hello Agent",
         description: "Replies to a greeting",
-        tags: ["hello"]
-    }],
-    defaultInputModes: ["text"],
-    defaultOutputModes: ["text"],
-    capabilities: {
-        streaming: true,
-        pushNotifications: true,
-        extendedAgentCard: false,
-        extensions: []
-    },
-    supportedInterfaces: [{
-        url: "http://localhost:9611",
-        protocolBinding: "HTTP+JSON",
-        protocolVersion: "1.0"
-    }]
-};
-final a2a:DefaultHandler handler = new (
-    card,
-    streamingCapability = true,
-    pushNotificationsCapability = true
-);
+        version: "1.0.0",
+        skills: [{id: "hello", name: "Hello", description: "Replies to a greeting", tags: ["hello"]}],
+        defaultInputModes: ["text"],
+        defaultOutputModes: ["text"],
+        capabilities: {},
+        supportedInterfaces: []
+    }
+}
+isolated service on new a2a:RestListener(9611, publicUrl = "http://localhost:9611") {
+    private final a2a:DefaultHandler handler = new (new HelloExecutor());
 
-// HttpListener serves A2A over HTTP+JSON (REST).
-listener a2a:HttpListener restListener = new (
-    9611,
-    handler,
-    publicUrl = "http://localhost:9611"
-);
-
-public function main() returns error? {
-    check restListener.attach(new HelloAgent());
+    isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
+            returns a2a:Task|a2a:Message|a2a:Error {
+        return self.handler.sendMessage(context, request);
+    }
 }
 ```
 
-The listener derives the **served** `capabilities` and `supportedInterfaces`
-from its configuration; the values above show what this local example
-advertises. Change `publicUrl` to the address clients actually use when the
-agent is deployed behind a proxy or gateway.
+The listener derives the **served** `capabilities` and `supportedInterfaces` from the
+operations the service defines and its configuration. Change `publicUrl` to the
+address clients actually use when the agent is deployed behind a proxy or gateway.
