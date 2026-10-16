@@ -11,7 +11,7 @@
 # bal-client's process is given a watchdog rather than trusted to exit.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
-PY="$HERE/python-agent/.venv/bin/python"
+PY="${PY:-$HERE/python-agent/.venv/bin/python}"
 kill_ports() { for p in "$@"; do lsof -ti :"$p" -sTCP:LISTEN 2>/dev/null | xargs -r kill 2>/dev/null || true; done; }
 trap 'kill_ports 9611 9700 19870 19871' EXIT
 kill_ports 9611 9700 19870 19871; sleep 1

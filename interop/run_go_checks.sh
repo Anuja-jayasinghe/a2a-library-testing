@@ -6,9 +6,7 @@
 # G-C typed errors (Go client only decodes application/json error bodies).
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-[ -f "$HERE/../.env" ] && . "$HERE/../.env"
-case "${ANTHROPIC_API_KEY:-}" in sk-ant-PASTE*) unset ANTHROPIC_API_KEY;; esac
-unset BAL_CONFIG_DATA  # these rigs declare no anthropicApiKey; bal rejects an unused configuration value
+. "$HERE/load_env.sh"
 cleanup() { pkill -f "/tmp/goagent" 2>/dev/null; pkill -f "interop/bal-listener" 2>/dev/null; pkill -f push_receiver.py 2>/dev/null; pkill -f bal_listener 2>/dev/null; true; }
 trap cleanup EXIT; cleanup; sleep 1
 up() { for _ in $(seq 1 90); do curl -sf "$1" >/dev/null && return; sleep 1; done; echo "NOT UP: $1"; }

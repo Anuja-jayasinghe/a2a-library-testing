@@ -43,7 +43,7 @@ async def handle(cr, cw):
     def inspect(data: bytes):
         # A client may reuse one keep-alive connection for many requests (a card GET, then the
         # stream POST), so every chunk is inspected, not just the first on the connection.
-        if not state["cut"] and b"POST /message:stream" in data:
+        if not state["cut"] and b"POST " in data and b"/message:stream" in data:
             state["cut"] = True
             asyncio.get_running_loop().create_task(cut_later())
 

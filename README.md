@@ -10,7 +10,7 @@ with `ballerina/a2a`, `ballerina/ai` and `ballerinax/ai.anthropic`.
 
 | Package   | What it is                                                        | Port |
 |-----------|-------------------------------------------------------------------|------|
-| `server`  | Trip Planner agent (`a2a:Listener` + `ai:Agent`)                  | 9095 |
+| `server`  | Trip Planner agent (`a2a:RestListener` + `ai:Agent`)                  | 9095 |
 | `server2` | Packing Assistant agent (same shape, different persona)           | 9097 |
 | `client`  | Traveler agent using `ai:A2aToolKit`; you chat with it in a prompt | 9096 (webhook receiver) |
 | `tck-sut` | Deterministic agent (no LLM, no API key) for the A2A TCK          | 9999 |
@@ -157,7 +157,7 @@ also works for a one-off.
 
 ## Code map
 
-- `server/main.bal`, `server2/main.bal` — an `ai:Agent` wrapped as an `a2a:Service`. The model's reply prefix (`NEEDS_INFO:` vs `ITINERARY:` / `PACKING_LIST:`) decides the A2A task state.
+- `server/main.bal`, `server2/main.bal` — an `ai:Agent` run by an `a2a:AgentExecutor`. The model's reply prefix (`NEEDS_INFO:` vs `ITINERARY:` / `PACKING_LIST:`) decides the A2A task state.
 - `client/traveler.bal` — builds the Traveler `ai:Agent` with `ai:A2aToolKit` pointed at both servers.
 - `client/main.bal` — starts the webhook receiver, runs the `You:` prompt loop.
 - `client/webhook.bal` — small HTTP receiver that logs push notifications.

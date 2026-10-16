@@ -45,14 +45,15 @@ public function main() returns error? {
         expect("a client can be built from the https URL", false, viaUrl.message());
     }
     if card is a2a:AgentCard {
-        expect("the advertised URL is the address the listener really answers on", card.supportedInterfaces[0].url == tls,
+        // The HTTP+JSON interface is served under /rest on the listener's address.
+        expect("the advertised URL is the address the listener really answers on", card.supportedInterfaces[0].url == tls + "/rest",
                 card.supportedInterfaces[0].url);
     }
 
     io:println("== publicUrl: a TLS listener that tells clients to use a proxy's address (9616) ==");
     a2a:AgentCard|a2a:Error proxied = a2a:resolveAgentCard("https://localhost:9616", clientConfig = trusting());
     expect("the configured public URL is served, whatever address the request arrived on", proxied is a2a:AgentCard
-            && proxied.supportedInterfaces[0].url == "https://agents.example.com/travel",
+            && proxied.supportedInterfaces[0].url == "https://agents.example.com/travel/rest",
             proxied is a2a:Error ? proxied.message() : proxied.supportedInterfaces[0].url);
 
     io:println("== TLS: the CA is NOT trusted ==");
@@ -66,7 +67,7 @@ public function main() returns error? {
     a2a:AgentCard|a2a:Error withCert = a2a:resolveAgentCard(mtls, clientConfig = withClientCert());
     expect("a valid client certificate is accepted", withCert is a2a:AgentCard, withCert is a2a:Error ? withCert.message() : "");
     if withCert is a2a:AgentCard {
-        withCert.supportedInterfaces[0].url = mtls;
+        withCert.supportedInterfaces[0].url = mtls + "/rest";
         a2a:HttpClient m = check new (withCert, clientConfig = withClientCert());
         a2a:Task|a2a:Message|a2a:Error r = send(m);
         expect("a send over mutual TLS works", r is a2a:Task, r is a2a:Error ? r.message() : "");

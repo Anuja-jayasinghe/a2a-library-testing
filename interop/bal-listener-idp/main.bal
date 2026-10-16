@@ -1,7 +1,7 @@
 // A ballerina/a2a listener protected by a REAL identity provider (Keycloak, ../keycloak),
 // used for the identity-provider and AUTH_REQUIRED checks:
 //   * tokens are validated against Keycloak's published JWKS (issuer, audience, scope);
-//   * `idp-whoami`        answers with the caller identity the library derived (`context.owner`);
+//   * `idp-whoami`        answers with the caller identity the library derived (`context?.owner`);
 //   * `idp-auth-required` pauses the task in TASK_STATE_AUTH_REQUIRED (spec 7.6); any other
 //                         message on that task completes it, echoing a credential sent back;
 //   * `idp-chain`         is an agent that calls a second agent, as its own service identity.
@@ -35,13 +35,13 @@ isolated function textOfParts(a2a:Part[] parts) returns string {
     return text;
 }
 
-isolated service class IdpAgent {
-    *a2a:Service;
-    isolated remote function onMessage(a2a:RequestContext context, a2a:TaskUpdater updater)
+isolated class IdpAgent {
+    *a2a:AgentExecutor;
+    public isolated function execute(a2a:RequestContext context, a2a:TaskUpdater updater)
             returns a2a:Message|a2a:Error? {
         string id = context.message.messageId;
         string text = textOfParts(context.message.parts);
-        string owner = context.owner ?: "(none)";
+        string owner = context?.owner ?: "(none)";
 
         if id.startsWith("idp-whoami") {
             check updater->working();
@@ -90,6 +90,7 @@ isolated service class IdpAgent {
         check updater->working();
         check updater->addArtifact([{text: string `echo: ${text}`}], name = "result");
         check updater->complete();
+        return;
     }
 }
 
@@ -106,7 +107,9 @@ a2a:AgentCard card = {
     supportedInterfaces: []
 };
 
-listener a2a:Listener l = new (PORT, agentCard = card, auth = [{
+final a2a:DefaultHandler handler = new (new IdpAgent());
+
+listener a2a:RestListener l = new (PORT, auth = [{
     jwtValidatorConfig: {
         issuer,
         audience: "a2a",
@@ -116,6 +119,72 @@ listener a2a:Listener l = new (PORT, agentCard = card, auth = [{
 }]);
 
 public function main() returns error? {
-    check l.attach(new IdpAgent());
+    check l.attach(new AgentOperations(handler, card));
     io:println(string `Ballerina agent (Keycloak auth) on http://localhost:${PORT}`);
+}
+
+isolated service class AgentOperations {
+    *a2a:Service;
+
+    private final a2a:DefaultHandler handler;
+    private final a2a:AgentCard & readonly card;
+
+    isolated function init(a2a:DefaultHandler handler, a2a:AgentCard card) {
+        self.handler = handler;
+        self.card = card.cloneReadOnly();
+    }
+
+    isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error {
+        return self.card;
+    }
+
+    isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
+            returns a2a:Task|a2a:Message|a2a:Error {
+        return self.handler.sendMessage(context, request);
+    }
+
+    isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error {
+        return self.handler.sendStreamingMessage(context, request);
+    }
+
+    isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error {
+        return self.handler.subscribeToTask(context, request);
+    }
+
+    isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
+            returns a2a:Task|a2a:Error {
+        return self.handler.getTask(context, request);
+    }
+
+    isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
+            returns a2a:ListTasksResponse|a2a:Error {
+        return self.handler.listTasks(context, request);
+    }
+
+    isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
+            returns a2a:Task|a2a:Error {
+        return self.handler.cancelTask(context, request);
+    }
+
+    isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context, a2a:TaskPushNotificationConfig request)
+            returns a2a:TaskPushNotificationConfig|a2a:Error {
+        return self.handler.createTaskPushNotificationConfig(context, request);
+    }
+
+    isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context, a2a:GetTaskPushNotificationConfigRequest request)
+            returns a2a:TaskPushNotificationConfig|a2a:Error {
+        return self.handler.getTaskPushNotificationConfig(context, request);
+    }
+
+    isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context, a2a:ListTaskPushNotificationConfigsRequest request)
+            returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error {
+        return self.handler.listTaskPushNotificationConfigs(context, request);
+    }
+
+    isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context, a2a:DeleteTaskPushNotificationConfigRequest request)
+            returns a2a:Error? {
+        return self.handler.deleteTaskPushNotificationConfig(context, request);
+    }
 }

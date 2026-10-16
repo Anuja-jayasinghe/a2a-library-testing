@@ -7,7 +7,10 @@
 # run all four to cover them:
 #   default          every capability on, no extended card
 #   no-capabilities  streaming and push notifications withheld
-#   extended         extended card configured
+#   extended         extended card configured. Runs ONLY the TCK's
+#                    extended-card tests: the extended card requires listener
+#                    auth (spec 13.3), and the TCK sends no credentials, so
+#                    every other request is (correctly) challenged with 401.
 #   extension        one required extension declared. Runs ONLY the TCK's
 #                    missing-required-extension test: every ordinary TCK
 #                    request omits the extension header, so with a required
@@ -24,7 +27,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 case "$MODE" in
   default)         ARGS=() ;;
   no-capabilities) ARGS=(-Cstreaming=false -CpushNotifications=false) ;;
-  extended)        ARGS=(-CextendedCard=true) ;;
+  extended)        ARGS=(-CextendedCard=true); ONLY=(-k extended_card) ;;
   extension)       ARGS=(-CrequiredExtension=true); ONLY=(-k missing_required_extension) ;;
   *) echo "unknown mode '$MODE' (default | no-capabilities | extended | extension)"; exit 2 ;;
 esac

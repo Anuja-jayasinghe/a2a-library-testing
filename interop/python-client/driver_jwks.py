@@ -84,7 +84,7 @@ def fetches():
 
 
 def call(port, token):
-    return httpx.get(f"http://localhost:{port}/tasks", headers={"A2A-Version": "1.0", "Authorization": "Bearer " + token},
+    return httpx.get(f"http://localhost:{port}/rest/tasks", headers={"A2A-Version": "1.0", "Authorization": "Bearer " + token},
                      timeout=20).status_code
 
 
@@ -159,7 +159,7 @@ try:
     check("startup fails with the typed error naming the auth entry",
           "ListenerConfiguration.auth[0] (jwtValidatorConfig) could not be initialised" in log,
           next((ln for ln in log.splitlines() if ln.strip()), "")[:160])
-    check("it is a returned error, not an uncaught panic through a2a:Listener's init",
+    check("it is a returned error, not an uncaught panic through a2a:RestListener's init",
           "ballerina.a2a.0.Listener:init" not in log)
 finally:
     for p in list(procs):

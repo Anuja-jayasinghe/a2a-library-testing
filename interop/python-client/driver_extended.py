@@ -192,7 +192,7 @@ async def main() -> None:
         check("delivered as a StreamResponse envelope ({\"task\": ...})", "task" in parsed, str(list(parsed.keys())))
 
     print("== I15: malformed body -> 400, not 500 ==")
-    r = await httpx_client.post(f"{url}/message:send", content="{not json",
+    r = await httpx_client.post(f"{url}/rest/message:send", content="{not json",
                                  headers={"A2A-Version": "1.0", "Content-Type": "application/json"})
     check("malformed JSON is 400", r.status_code == 400, f"got {r.status_code}")
 

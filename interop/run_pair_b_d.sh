@@ -62,5 +62,6 @@ CP_FILE=/tmp/interop_java_client_cp.txt
 ( cd "$A2A_JAVA_DIR/examples/helloworld/client" \
   && mvn -q dependency:build-classpath -Dmdep.outputFile="$CP_FILE" )
 CP="$(cat "$CP_FILE"):$A2A_JAVA_DIR/examples/helloworld/client/target/classes"
-java -Dquarkus.agentcard.protocol=HTTP+JSON -cp "$CP" \
-  org.a2aproject.sdk.examples.helloworld.client.HelloWorldClient
+# the example client blocks on a MessageEvent, which a task-producing agent never sends: bound it (exit 142 = timed out after all events arrived)
+perl -e 'alarm 25; exec @ARGV' java -Dquarkus.agentcard.protocol=HTTP+JSON -cp "$CP" \
+  org.a2aproject.sdk.examples.helloworld.client.HelloWorldClient || true

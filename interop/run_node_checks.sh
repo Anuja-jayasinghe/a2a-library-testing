@@ -7,12 +7,13 @@
 # Setup once: (cd node-agent && npm install). Requires ballerina/a2a published locally.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
+. "$HERE/load_env.sh"
 cleanup() { pkill -f "node-agent/agent.mjs\|node agent.mjs" 2>/dev/null; pkill -f "interop/bal-listener" 2>/dev/null; pkill -f push_receiver.py 2>/dev/null; pkill -f bal_listener 2>/dev/null; true; }
 trap cleanup EXIT; cleanup; sleep 1
 up() { for _ in $(seq 1 90); do curl -sf "$1" >/dev/null && return; sleep 1; done; echo "NOT UP: $1"; }
 
 echo "########## N-A: ballerina/a2a client -> Node agent ##########"
-(cd "$HERE/node-agent" && TRAILING_SLASH=0 node agent.mjs 9800 >/tmp/node_agent.log 2>&1 &)
+(cd "${NODE_DIR:-$HERE/node-agent}" && TRAILING_SLASH=0 node agent.mjs 9800 >/tmp/node_agent.log 2>&1 &)
 up http://localhost:9800/.well-known/agent-card.json
 (cd "$HERE/bal-client-node" && rm -rf target && bal run 2>&1 | grep -E "^(PASS|FAIL|==|OVERALL)")
 cleanup; sleep 1
@@ -22,7 +23,7 @@ echo "########## N-C: @a2a-js/sdk client -> ballerina/a2a Listener ##########"
 up http://localhost:9611/.well-known/agent-card.json
 python3 "$HERE/push_receiver.py" 19872 /tmp/node_client_push.json >/tmp/pr.log 2>&1 &
 sleep 1
-(cd "$HERE/node-agent" && node client.mjs 2>&1)
+(cd "${NODE_DIR:-$HERE/node-agent}" && node client.mjs 2>&1)
 echo "########## N-C2: J-D streaming (real a2a-java client) ##########"
 CP="$(cat /tmp/interop_java_client_cp.txt):$HOME/gitProject/a2a-java/examples/helloworld/client/target/classes"
 (cd "$HERE/java-client-stream" && java -Dquarkus.agentcard.protocol=HTTP+JSON -cp "$CP" StreamDriver.java http://localhost:9611 2>&1 | grep -v SLF4J) \

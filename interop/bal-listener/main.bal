@@ -12,9 +12,9 @@ configurable decimal PACE_SECONDS = 1.5;
 // in A2A-Extensions is refused with ExtensionSupportRequiredError (spec 3.3.4).
 configurable string REQUIRED_EXTENSION = "";
 
-isolated service class InteropAgent {
-    *a2a:Service;
-    isolated remote function onMessage(a2a:RequestContext context, a2a:TaskUpdater updater)
+isolated class InteropAgent {
+    *a2a:AgentExecutor;
+    public isolated function execute(a2a:RequestContext context, a2a:TaskUpdater updater)
             returns a2a:Message|a2a:Error? {
         string id = context.message.messageId;
         string text = "";
@@ -59,6 +59,7 @@ isolated service class InteropAgent {
         check updater->working();
         check updater->addArtifact([{text: string `echo: ${text}`}], name = "result");
         check updater->complete();
+        return;
     }
 }
 
@@ -73,13 +74,80 @@ a2a:AgentCard card = {
     supportedInterfaces: []
 };
 
-listener a2a:Listener l = new (PORT, agentCard = card, keepAliveInterval = KEEPALIVE_SECONDS,
-    pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
+final a2a:DefaultHandler handler = new (new InteropAgent(), pushSender = new a2a:HttpPushNotificationSender({validateUrl: false}));
+
+listener a2a:RestListener l = new (PORT, keepAliveInterval = KEEPALIVE_SECONDS);
 // validateUrl: false because the interop push receiver runs on localhost,
 // which the default SSRF guard (specification section 13.2) rejects; a real
 // deployment leaves that guard on.
 
 public function main() returns error? {
-    check l.attach(new InteropAgent());
+    check l.attach(new AgentOperations(handler, card));
     io:println(string `Ballerina interop listener on http://localhost:${PORT}`);
+}
+
+isolated service class AgentOperations {
+    *a2a:Service;
+
+    private final a2a:DefaultHandler handler;
+    private final a2a:AgentCard & readonly card;
+
+    isolated function init(a2a:DefaultHandler handler, a2a:AgentCard card) {
+        self.handler = handler;
+        self.card = card.cloneReadOnly();
+    }
+
+    isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error {
+        return self.card;
+    }
+
+    isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
+            returns a2a:Task|a2a:Message|a2a:Error {
+        return self.handler.sendMessage(context, request);
+    }
+
+    isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error {
+        return self.handler.sendStreamingMessage(context, request);
+    }
+
+    isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error {
+        return self.handler.subscribeToTask(context, request);
+    }
+
+    isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
+            returns a2a:Task|a2a:Error {
+        return self.handler.getTask(context, request);
+    }
+
+    isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
+            returns a2a:ListTasksResponse|a2a:Error {
+        return self.handler.listTasks(context, request);
+    }
+
+    isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
+            returns a2a:Task|a2a:Error {
+        return self.handler.cancelTask(context, request);
+    }
+
+    isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context, a2a:TaskPushNotificationConfig request)
+            returns a2a:TaskPushNotificationConfig|a2a:Error {
+        return self.handler.createTaskPushNotificationConfig(context, request);
+    }
+
+    isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context, a2a:GetTaskPushNotificationConfigRequest request)
+            returns a2a:TaskPushNotificationConfig|a2a:Error {
+        return self.handler.getTaskPushNotificationConfig(context, request);
+    }
+
+    isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context, a2a:ListTaskPushNotificationConfigsRequest request)
+            returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error {
+        return self.handler.listTaskPushNotificationConfigs(context, request);
+    }
+
+    isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context, a2a:DeleteTaskPushNotificationConfigRequest request)
+            returns a2a:Error? {
+        return self.handler.deleteTaskPushNotificationConfig(context, request);
+    }
 }
