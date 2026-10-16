@@ -800,7 +800,7 @@ Both listeners from one `http:Listener` (`/rest`, `/rpc`), against the bala pack
 | Layer | Result |
 |---|---|
 | TCK, JSON-RPC | 99 pass, 1 fail (`CARD-CACHE-003`, a MAY) |
-| TCK, HTTP+JSON | 90 pass, 3 fail, all three where the TCK is behind the spec (`CARD-CACHE-003` is a MAY; `CORE-CANCEL-002` wants 409, the spec says 400; `HTTP_JSON-SVC-001` wants `application/json`, the spec says `application/a2a+json`). With errors as `application/a2a+json` (the spec's example) the error-`Content-Type` check fails too. See finding 43. |
+| TCK, HTTP+JSON | 88 pass, 5 fail on the final build, none a listener defect: `CARD-CACHE-003` (a MAY); `CORE-CANCEL-002` wants 409, the spec says 400; `HTTP_JSON-SVC-001` and two `HTTP_JSON-ERR-001` error-Content-Type checks want `application/json`, the spec says `application/a2a+json`. (With errors served as `application/json` it was 90/3.) See finding 43. |
 | TCK, no-capabilities / required-extension | no new failures beyond the same ones; `extended` mode needs credentials and was skipped |
 | `a2a-sdk` (Python) 1.2.2, both transports, unary and streaming | all pass |
 | `@a2a-js/sdk` 1.3.0, both transports | all pass |
