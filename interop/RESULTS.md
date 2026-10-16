@@ -792,3 +792,45 @@ compiled against an older `a2a` and is not invalidated when `a2a` 0.1.0 is repla
 
 Not covered this session: Rust and .NET (no `cargo` or `dotnet` on this machine), and the GraalVM native-image build (no
 `native-image` installed).
+
+## Final REST + JSON-RPC run (2026-10-16, `feat/jsonrpc-listener` at `15b8232`)
+
+Both listeners from one `http:Listener` (`/rest`, `/rpc`), against the bala packed from that commit. 531 module tests pass.
+
+| Layer | Result |
+|---|---|
+| TCK, JSON-RPC | 99 pass, 1 fail (`CARD-CACHE-003`, a MAY) |
+| TCK, HTTP+JSON | 90 pass, 3 fail (`CARD-CACHE-003` MAY; `CORE-CANCEL-002` 400 vs 409, finding 43; `HTTP_JSON-SVC-001` successful bodies are `application/a2a+json`) |
+| TCK, no-capabilities / required-extension | no new failures beyond the same ones; `extended` mode needs credentials and was skipped |
+| `a2a-sdk` (Python) 1.2.2, both transports, unary and streaming | all pass |
+| `@a2a-js/sdk` 1.3.0, both transports | all pass |
+| `a2a-go` v2.6.0, both transports, typed errors | all pass |
+| `a2a-java` 1.4.1-SNAPSHOT, both transports | pass after findings 46 and 47 |
+| `a2a-dotnet` (main), HTTP+JSON | 25/25 |
+| `a2a-dotnet`, JSON-RPC | 23/25: one rig assertion (expects the REST client class), one SDK gap (finding 49) |
+| `a2a-rs` (`a2a-client-lf` 0.2.5), JSON-RPC | all pass |
+| `a2a-rs`, HTTP+JSON | 26/27: the known legacy-subscribe fallback, R3 |
+| Real LLM (Operations Desk, Claude Haiku 4.5), one request per client | Python (3 runs incl. input-required continuation), JS (JSON-RPC stream), Go (REST), Java (JSON-RPC), .NET (JSON-RPC), Rust (JSON-RPC), and the chat agent through `a2a:HttpClient`: all completed with the correct incident summary |
+
+### Findings
+
+**46. (Listener) A client that serialises protobuf defaults sends `"tenant": ""`, and JSON-RPC refused it.** The Java client does this on
+every JSON-RPC call, so `InvalidParamsError: request routed under tenant ""` came back. An empty tenant now means no tenant
+(`15b8232^`, covered by `testAnEmptyTenantMeansNoTenantOverJsonRpc`).
+
+**47. (Listener, both transports) An empty `message.taskId` or `contextId` was read as a task to continue.** The same clients send
+`"taskId": ""`, which produced `TASK_NOT_FOUND "no task with id "` on REST and JSON-RPC alike. The request decoder now drops an id that is
+the empty string (`15b8232`, covered by `testEmptyIdsMeanUnsetOverJsonRpc`). The REST listener branch needs the same decoder change.
+
+**48. (Rig) `go run` against the released module replaces the earlier local `goclient` binary.** `scratchpad/gofinal` pins
+`github.com/a2aproject/a2a-go/v2 v2.6.0`.
+
+**49. (SDK, not ours) `a2a-dotnet`'s JSON-RPC client does not surface a plain JSON-RPC error answered to a streaming call.**
+`SubscribeToTask` on a finished task returns `200 application/json` with `error.code -32004`; the .NET client ends the stream with no error
+instead of raising `UnsupportedOperation`. The other SDKs that were run surface it on the unary path; this one is the streaming path.
+
+**50. (Rig) The "illegal return: response has already been sent" line is the module suite's own listener-timeout test.** It appears in
+`bal test` output only, never in a listener run.
+
+Now covered: Rust and .NET, natively (`rust` 1.99, `dotnet` 10.0.401 installed with Homebrew on 2026-10-16). Still not covered: the GraalVM
+native-image build on this machine (CI's `bal test --graalvm` jobs on PR 5 and PR 6 pass).
