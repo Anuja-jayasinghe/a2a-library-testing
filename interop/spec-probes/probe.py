@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Raw-HTTP spec probes against an a2a:RestListener (bal-listener). Prints observed behaviour; expectations
-are recorded next to each probe with the spec section that justifies them. Usage: probe.py PORT [BASE_PATH]  (BASE_PATH is where the binding is mounted, /rest for a2a:HttpListener)"""
+are recorded next to each probe with the spec section that justifies them. Usage: probe.py PORT [BASE_PATH]  (BASE_PATH is where the binding is mounted, /rest for a2a:RestListener)"""
 import http.client, json, sys, uuid
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9620
