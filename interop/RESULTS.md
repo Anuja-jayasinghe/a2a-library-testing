@@ -774,11 +774,11 @@ already answered.
 
 ### Findings
 
-**43. (Spec gap, TCK newly strict) `TaskNotCancelableError` is 400; the spec's table says 409.** TCK `de6af18` ("assert the
-specific spec-mandated error") made `CORE-CANCEL-002` check the status, so it now fails. Not a `feat/rest-listener` regression:
-`server_errors.bal` has returned 400 on purpose since earlier commits, its comment citing `a2a-sdk`, `a2a-go` and `@a2a-js/sdk`.
-The spec's section 5.4 table and 11.6 say 409 (`ContentTypeNotSupportedError` 415, `InvalidAgentResponseError` 502). Worth
-deciding whether to follow the spec now that the TCK enforces it.
+**43. (Corrected 2026-10-16) `TaskNotCancelableError` is 400, and that is what the specification says.** Section 5.4's table and section 11.6 both give
+`400 Bad Request` (`409` was the 0.3 mapping). TCK `CORE-CANCEL-002` (`de6af18`) asserts 409, so it contradicts the live specification; the listener's
+400 is right and stays. The same stale-TCK pattern applies to `HTTP_JSON-SVC-001` and the error `Content-Type` check, which want
+`application/json` as a substring while section 11.1 says `application/a2a+json` SHOULD be used for requests and responses, and the section 11.6
+error example uses it too. The listener serves `application/a2a+json` for both, as the spec shows. Worth reporting to the TCK.
 
 **44. (Rig) `bal-client-tls` expected the interface URL without `/rest`.** The served card's HTTP+JSON interface is the listener's
 address plus `/rest`, as the module README says. The three checks that compared against the bare address (and the mutual-TLS
@@ -800,11 +800,11 @@ Both listeners from one `http:Listener` (`/rest`, `/rpc`), against the bala pack
 | Layer | Result |
 |---|---|
 | TCK, JSON-RPC | 99 pass, 1 fail (`CARD-CACHE-003`, a MAY) |
-| TCK, HTTP+JSON | 90 pass, 3 fail (`CARD-CACHE-003` MAY; `CORE-CANCEL-002` 400 vs 409, finding 43; `HTTP_JSON-SVC-001` successful bodies are `application/a2a+json`) |
+| TCK, HTTP+JSON | 90 pass, 3 fail, all three where the TCK is behind the spec (`CARD-CACHE-003` is a MAY; `CORE-CANCEL-002` wants 409, the spec says 400; `HTTP_JSON-SVC-001` wants `application/json`, the spec says `application/a2a+json`). With errors as `application/a2a+json` (the spec's example) the error-`Content-Type` check fails too. See finding 43. |
 | TCK, no-capabilities / required-extension | no new failures beyond the same ones; `extended` mode needs credentials and was skipped |
 | `a2a-sdk` (Python) 1.2.2, both transports, unary and streaming | all pass |
 | `@a2a-js/sdk` 1.3.0, both transports | all pass |
-| `a2a-go` v2.6.0, both transports, typed errors | all pass |
+| `a2a-go` v2.6.0, both transports | all pass with errors as `application/json`; released v2.6.0 cannot decode a `application/a2a+json` error body, fixed on `main` (#448), so typed errors need the next release |
 | `a2a-java` 1.4.1-SNAPSHOT, both transports | pass after findings 46 and 47 |
 | `a2a-dotnet` (main), HTTP+JSON | 25/25 |
 | `a2a-dotnet`, JSON-RPC | 23/25: one rig assertion (expects the REST client class), one SDK gap (finding 49) |
@@ -825,12 +825,16 @@ the empty string (`15b8232`, covered by `testEmptyIdsMeanUnsetOverJsonRpc`). The
 **48. (Rig) `go run` against the released module replaces the earlier local `goclient` binary.** `scratchpad/gofinal` pins
 `github.com/a2aproject/a2a-go/v2 v2.6.0`.
 
-**49. (SDK, not ours) `a2a-dotnet`'s JSON-RPC client does not surface a plain JSON-RPC error answered to a streaming call.**
-`SubscribeToTask` on a finished task returns `200 application/json` with `error.code -32004`; the .NET client ends the stream with no error
-instead of raising `UnsupportedOperation`. The other SDKs that were run surface it on the unary path; this one is the streaming path.
+**49. (SDK) `a2a-dotnet`'s JSON-RPC client ends a streaming call silently when the server answers with a plain JSON-RPC error.** Root cause:
+`A2AClient.SendStreamingJsonRpcRequestAsync` passes every body to `SseParser` without checking `Content-Type`. Since upstream #476 the .NET server
+and the TCK use plain JSON-RPC errors for failures before the stream starts, which is what this listener does as well. Reported as
+a2aproject/a2a-dotnet#551 with the fix in #552; with it, `SubscribeToTask` on a finished task raises `UnsupportedOperation` against this listener.
 
-**50. (Rig) The "illegal return: response has already been sent" line is the module suite's own listener-timeout test.** It appears in
-`bal test` output only, never in a listener run.
+**50. (Verified not a bug) "illegal return: response has already been sent" appears only in the module's own `bal test` output.** The library never uses
+`http:Caller`, so it cannot return after responding. It is absent from every listener log of this run (TCK system under test, interop listener,
+Operations Desk, chat service), and from a run where clients were aborted mid-stream against both listeners. That run logs only the Ballerina
+mime layer's own "unable to write event stream to wire: remote client closed" at ERROR. The test stubs in `tests/testutil.bal` do use
+`caller->respond` with deliberately dropped connections.
 
 Now covered: Rust and .NET, natively (`rust` 1.99, `dotnet` 10.0.401 installed with Homebrew on 2026-10-16). Still not covered: the GraalVM
 native-image build on this machine (CI's `bal test --graalvm` jobs on PR 5 and PR 6 pass).
