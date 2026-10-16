@@ -2,8 +2,8 @@
 
 Each pair shows the **user-facing client call** and **server callback** for one
 plain text exchange. The snippets focus on the API shape; the linked interop
-programs contain the complete imports, dependency setup, agent cards, HTTP
-hosting, and error handling. All cards used here advertise A2A v1.0. The
+programs and upstream SDK samples show the complete imports, dependency setup,
+agent cards, HTTP hosting, and error handling. All cards used here advertise A2A v1.0. The
 interop examples use the HTTP+JSON binding so the languages can talk to one
 another. A reply can be a direct `Message` or a `Task`; these servers choose a
 direct `Message` to keep the examples small.
@@ -13,9 +13,9 @@ direct `Message` to keep the examples small.
 | JavaScript | `@a2a-js/sdk` 1.2.1 | [client.mjs](../interop/node-agent/client.mjs) | [agent.mjs](../interop/node-agent/agent.mjs) |
 | Python | `a2a-sdk` 1.1.5 | [driver.py](../interop/python-client/driver.py) | [agent.py](../interop/python-agent/agent.py) |
 | Java | `a2a-java` 1.4.1.Final-SNAPSHOT (local checkout) | [StreamDriver.java](../interop/java-client-stream/StreamDriver.java) | [AgentExecutorProducer.java](https://github.com/a2aproject/a2a-java/blob/main/examples/helloworld/server/src/main/java/org/a2aproject/sdk/examples/helloworld/server/AgentExecutorProducer.java) |
-| Rust | `a2a-client-lf` 0.2.5 / `a2a-server-lf` 0.4.4 | [client.rs](../interop/rust-agent/src/client.rs) | [agent.rs](../interop/rust-agent/src/agent.rs) |
+| Rust | `a2a-client-lf` 0.2.5 / `a2a-server-lf` 0.4.4 | [client.rs](https://github.com/a2aproject/a2a-rs/blob/main/examples/src/helloworld/client.rs) | [server.rs](https://github.com/a2aproject/a2a-rs/blob/main/examples/src/helloworld/server.rs) |
 | Go | `a2a-go/v2` 2.6.0 | [client/main.go](../interop/go-agent/client/main.go) | [agent/main.go](../interop/go-agent/agent/main.go) |
-| .NET | `a2a-dotnet` source at `76de7f3` | [Client.cs](../interop/dotnet-agent/Client.cs) | [Agent.cs](../interop/dotnet-agent/Agent.cs) |
+| .NET | `a2a-dotnet` source at `76de7f3` | [MessageBasedCommunicationSample.cs](https://github.com/a2aproject/a2a-dotnet/blob/main/samples/AgentClient/Samples/MessageBasedCommunicationSample.cs) | [EchoAgent.cs](https://github.com/a2aproject/a2a-dotnet/blob/main/samples/AgentServer/EchoAgent.cs) |
 | Ballerina | `ballerina/a2a` local 0.1.0 | [bal-client/main.bal](../interop/bal-client/main.bal) | [bal-listener/main.bal](../interop/bal-listener/main.bal) |
 
 `http://localhost:PORT` below means the base URL of a running agent. For a
@@ -320,24 +320,69 @@ public function main() returns error? {
 }
 ```
 
-**Server** — declare a service that defines the operations it supports as resource functions:
+**Server** — implement `a2a:Service.onMessage`, then attach it to an
+`a2a:HttpListener` for HTTP+JSON (REST). The handler and listener settings below
+match the capability flags and interface URL shown in the card:
 
 ```ballerina
 import ballerina/a2a;
 
-@a2a:ServiceConfig {
-    agentCard: {
-        name: "Hello Agent", description: "Replies to a greeting", version: "1.0.0",
-        skills: [{id: "hello", name: "Hello", description: "Replies to a greeting", tags: ["hello"]}],
-        defaultInputModes: ["text"], defaultOutputModes: ["text"],
-        capabilities: {}, supportedInterfaces: []
+isolated service class HelloAgent {
+    *a2a:Service;
+
+    isolated remote function onMessage(a2a:RequestContext context, a2a:TaskUpdater updater)
+            returns a2a:Message|a2a:Error? {
+        return {
+            messageId: "reply-1",
+            role: a2a:ROLE_AGENT,
+            parts: [{text: "Hello from Ballerina"}]
+        };
     }
 }
-isolated service on new a2a:RestListener(9611) {
 
-    isolated resource function post message\:send(a2a:SendMessageRequest request)
-            returns a2a:Task|a2a:Message|a2a:Error {
-        return {messageId: "reply-1", role: a2a:ROLE_AGENT, parts: [{text: "Hello from Ballerina"}]};
-    }
+a2a:AgentCard card = {
+    name: "Hello Agent",
+    description: "Replies to a greeting",
+    version: "1.0.0",
+    skills: [{
+        id: "hello",
+        name: "Hello",
+        description: "Replies to a greeting",
+        tags: ["hello"]
+    }],
+    defaultInputModes: ["text"],
+    defaultOutputModes: ["text"],
+    capabilities: {
+        streaming: true,
+        pushNotifications: true,
+        extendedAgentCard: false,
+        extensions: []
+    },
+    supportedInterfaces: [{
+        url: "http://localhost:9611",
+        protocolBinding: "HTTP+JSON",
+        protocolVersion: "1.0"
+    }]
+};
+final a2a:DefaultHandler handler = new (
+    card,
+    streamingCapability = true,
+    pushNotificationsCapability = true
+);
+
+// HttpListener serves A2A over HTTP+JSON (REST).
+listener a2a:HttpListener restListener = new (
+    9611,
+    handler,
+    publicUrl = "http://localhost:9611"
+);
+
+public function main() returns error? {
+    check restListener.attach(new HelloAgent());
 }
 ```
+
+The listener derives the **served** `capabilities` and `supportedInterfaces`
+from its configuration; the values above show what this local example
+advertises. Change `publicUrl` to the address clients actually use when the
+agent is deployed behind a proxy or gateway.
