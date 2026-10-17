@@ -838,3 +838,35 @@ mime layer's own "unable to write event stream to wire: remote client closed" at
 
 Now covered: Rust and .NET, natively (`rust` 1.99, `dotnet` 10.0.401 installed with Homebrew on 2026-10-16). Still not covered: the GraalVM
 native-image build on this machine (CI's `bal test --graalvm` jobs on PR 5 and PR 6 pass).
+
+## Input-mode (part media type) validation (2026-10-17, `feat/rest-listener` and `feat/jsonrpc-listener`)
+
+`validateInputModes` on `RestListenerConfiguration` (and so `JsonRpcListenerConfiguration`) answers `ContentTypeNotSupportedError` (HTTP 400 / JSON-RPC
+`-32005`) for a message part whose `mediaType` is not in the card's `defaultInputModes` plus every skill's `inputModes`. Specification sections 3.1.1 and 13
+define the error and say an agent SHOULD reject unexpected media types; no sentence makes validation a MUST, and no reference server does it by default
+(Python `a2a-sdk` has an opt-in `validate_input_modes`; the Java, Go, .NET and Rust servers have no check).
+
+**51. (TCK, not the library) `CORE-SEND-003` requires an unsupported media type to be accepted.** The requirement has no `expected_error`, so the generic
+`test_must_requirement` sends `application/x-unsupported-tck-type` and fails on any error: with the check on, the TCK reports `[400] media type
+application/x-unsupported-tck-type is not supported` as a failure of a MUST. The earlier note that this check would make `CORE-SEND-003` pass was wrong.
+Decision: the check is opt-in (default `false`), as in the reference SDKs. TCK run with the default (check off): 88 passed, 5 failed (the known
+`CARD-CACHE-003` MAY plus `CORE-CANCEL-002`, `HTTP_JSON-SVC-001` and the two `HTTP_JSON-ERR-001` tests, all from the TCK's outdated 409 / `application/json`
+expectations); `no-capabilities`: 70 passed, same 5. With the check on, `CORE-SEND-003` is a sixth failure.
+
+Tests added to the module (`ballerina/tests/input_modes_test.bal`; module suite 525 passing on `feat/rest-listener`, 546 on `feat/jsonrpc-listener`):
+
+| Test | Covers |
+|---|---|
+| `testAnUndeclaredMediaTypeIsRejectedOverRest` | `image/png` on `message:send`: 400 and `CONTENT_TYPE_NOT_SUPPORTED` |
+| `testAnUndeclaredMediaTypeIsRejectedOnTheStreamOverRest` | same on `message:stream` |
+| `testADeclaredMediaTypeIsAcceptedOverRest` | `text/plain; charset=UTF-8` passes |
+| `testASkillsInputModeWidensTheAcceptedSetOverRest` | a skill's `application/json` passes |
+| `testAPartWithoutAMediaTypeIsNotCheckedOverRest` | unset `mediaType` passes |
+| `testValidationIsOffByDefaultOverRest` | default listener accepts `image/png` |
+| `testABareDeclaredTypeMatchesItsSubtypes` | declared `text` matches `text/markdown`, `TEXT/Plain`, rejects `image/png` |
+| `testWildcardsAreHonoured` | `image/*`, `*/*` |
+| `testACardDeclaringNoInputModesAcceptsEverything` | empty union accepts all |
+| `testTheFirstUnsupportedPartIsNamed` | the error names the first bad type |
+| `testAnUndeclaredMediaTypeIsRejectedOverJsonRpc` / `...OnTheStreamOverJsonRpc` | `-32005` for `SendMessage` and `SendStreamingMessage` |
+| `testDeclaredAndUnstatedMediaTypesAreAcceptedOverJsonRpc` | declared, skill-widened and unset types pass |
+| `testValidationIsOffByDefaultOverJsonRpc` | default listener accepts `image/png` |
