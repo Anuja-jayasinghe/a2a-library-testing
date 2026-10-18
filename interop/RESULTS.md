@@ -870,3 +870,24 @@ Tests added to the module (`ballerina/tests/input_modes_test.bal`; module suite 
 | `testAnUndeclaredMediaTypeIsRejectedOverJsonRpc` / `...OnTheStreamOverJsonRpc` | `-32005` for `SendMessage` and `SendStreamingMessage` |
 | `testDeclaredAndUnstatedMediaTypesAreAcceptedOverJsonRpc` | declared, skill-widened and unset types pass |
 | `testValidationIsOffByDefaultOverJsonRpc` | default listener accepts `image/png` |
+
+## Release-readiness re-run (2026-10-18, `feat/jsonrpc-listener` with `validateInputModes`, 546 module tests)
+
+One listener per transport on one `http:Listener` (`interop/bal-listener`-style dual listener, `/rest` and `/rpc`), local bala packed from the branch tip.
+
+| Layer | Result |
+|---|---|
+| TCK, JSON-RPC (default / no-capabilities / required-extension) | 99 / 78 / 1 pass; 1 fail in the first two: `CARD-CACHE-003` (a MAY) |
+| TCK, HTTP+JSON (default / no-capabilities / required-extension) | 88 / 70 / 1 pass; 5 fail in the first two, all unchanged: `CARD-CACHE-003`, `CORE-CANCEL-002` (409 vs spec 400), `HTTP_JSON-SVC-001`, two `HTTP_JSON-ERR-001` (want `application/json`, spec says `application/a2a+json`) |
+| TCK, extended | not run: needs credentials (finding 42) |
+| `a2a-sdk` (Python) 1.2.2, both transports, unary and streaming | 28/28 |
+| `@a2a-js/sdk` 1.3.0, both transports | 14/14 |
+| `a2a-go` v2.6.0 | JSON-RPC 6/6, HTTP+JSON 4/6: typed errors fail because v2.6.0 cannot decode an `application/a2a+json` error body |
+| `a2a-go` main (v2.6.1-0.20261016122541-4226e7459929, includes #448) | 12/12 |
+| `a2a-java` (`fc2e96e5`) | JSON-RPC and HTTP+JSON stream pass (4 events, 1 completion) |
+| `a2a-dotnet` main, HTTP+JSON | 25/25 |
+| `a2a-rs` | all pass, including push configuration CRUD |
+| Dependent Ballerina packages built on the new bala | 47 of 58 build; the 11 that fail are `employee-concierge-demo` (10) and `a2a-v1-poc`, still on the pre-listener API |
+| `bal scan` (tool_scan 0.12.0), local | 301 findings: 258 are the secrets rules on header-name and URL string literals (219 in tests), 40 unused parameters that are dictated by handler signatures, 3 `'default` accessors in test stubs; none actionable |
+
+No real-LLM run this time (kept the API-key use to zero; the 2026-10-16 matrix covered it and nothing in the request path changed except the opt-in check).
