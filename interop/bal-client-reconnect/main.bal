@@ -49,7 +49,7 @@ function run(int attempts, string id) returns [boolean, int, string]|a2a:Error|e
     // proxy after the card fetch. Point the card's interface at the proxy instead.
     a2a:AgentCard card = check a2a:resolveAgentCard(proxyUrl, clientConfig = {httpVersion: http:HTTP_1_1});
     card.supportedInterfaces[0].url = proxyUrl;
-    a2a:HttpClient c = check new (card, maxReconnectAttempts = attempts, clientConfig = {httpVersion: http:HTTP_1_1});
+    a2a:RestClient c = check new (card, maxReconnectAttempts = attempts, clientConfig = {httpVersion: http:HTTP_1_1});
     stream<a2a:StreamResponse, a2a:Error?> s = check c->sendStreamingMessage({
         message: {messageId: id, role: a2a:ROLE_USER, parts: [{text: "tick"}]}
     });

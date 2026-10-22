@@ -49,7 +49,7 @@ public function main() returns error? {
     foreach [string, string] [label, url] in [["Python a2a-sdk", pythonUrl], ["Java a2a-java", javaUrl]] {
         // The card is fetched normally; only the version header the client *sends* is wrong.
         a2a:AgentCard card = check a2a:resolveAgentCard(url, clientConfig = {httpVersion: http:HTTP_1_1});
-        a2a:HttpClient c = check new (card, clientConfig = {httpVersion: http:HTTP_1_1},
+        a2a:RestClient c = check new (card, clientConfig = {httpVersion: http:HTTP_1_1},
                 headers = {"A2A-Version": "2.0"});
         a2a:Task|a2a:Message|a2a:Error r = c->sendMessage(msg("ver-1"));
         expect(label + ": a real server's VERSION_NOT_SUPPORTED becomes VersionNotSupportedError",
@@ -60,13 +60,13 @@ public function main() returns error? {
     a2a:AgentCard nsCard = check a2a:resolveAgentCard(noStreamingUrl);
     expect("the server withholds streaming (its card says so)", !nsCard.capabilities.streaming);
     nsCard.capabilities.streaming = true; // let the client believe it, so the *server* is what says no
-    a2a:HttpClient liar = check new (nsCard);
+    a2a:RestClient liar = check new (nsCard);
     stream<a2a:StreamResponse, a2a:Error?>|a2a:Error st = liar->sendStreamingMessage(msg("uo-1"));
     expect("sendStreamingMessage against a non-streaming server", st is a2a:UnsupportedOperationError, nameOf(st));
     stream<a2a:StreamResponse, a2a:Error?>|a2a:Error sub = liar->subscribeToTask({id: "anything"});
     expect("subscribeToTask against a non-streaming server", sub is a2a:UnsupportedOperationError, nameOf(sub));
 
-    a2a:HttpClient py = check new (pythonUrl);
+    a2a:RestClient py = check new (pythonUrl);
     a2a:Task|a2a:Message|a2a:Error done = py->sendMessage(msg("uo-done"));
     if done is a2a:Task {
         stream<a2a:StreamResponse, a2a:Error?>|a2a:Error late = py->subscribeToTask({id: done.id});
@@ -79,19 +79,19 @@ public function main() returns error? {
     }
 
     io:println("== the A2A-Extensions request header, as parsed by a real server ==");
-    a2a:HttpClient withExt = check new (pythonUrl, requestedExtensions = ["urn:x:zeta", "urn:x:alpha"]);
+    a2a:RestClient withExt = check new (pythonUrl, requestedExtensions = ["urn:x:zeta", "urn:x:alpha"]);
     a2a:Task|a2a:Message|a2a:Error e1 = withExt->sendMessage(msg("interop-echo-extensions-1"));
     expect("two requested extensions arrive intact (the server sees both, in either order)",
             e1 is a2a:Task && textOf(e1) == "urn:x:alpha,urn:x:zeta", e1 is a2a:Task ? "server saw: " + textOf(e1) : nameOf(e1));
     a2a:Task|a2a:Message|a2a:Error e2 = py->sendMessage(msg("interop-echo-extensions-2"));
     expect("no extensions requested: none arrive", e2 is a2a:Task && textOf(e2) == "", e2 is a2a:Task ? "server saw: " + textOf(e2) : nameOf(e2));
-    a2a:HttpClient javaExt = check new (javaUrl, clientConfig = {httpVersion: http:HTTP_1_1},
+    a2a:RestClient javaExt = check new (javaUrl, clientConfig = {httpVersion: http:HTTP_1_1},
             requestedExtensions = ["urn:x:unknown"]);
     a2a:Task|a2a:Message|a2a:Error e3 = javaExt->sendMessage(msg("ext-java"));
     expect("an extension the Java server does not know is ignored, not an error", e3 is a2a:Task || e3 is a2a:Message, nameOf(e3));
 
     io:println("== content-type negotiation against the Java server (rejects application/a2a+json with 415) ==");
-    a2a:HttpClient jc = check new (javaUrl, clientConfig = {httpVersion: http:HTTP_1_1});
+    a2a:RestClient jc = check new (javaUrl, clientConfig = {httpVersion: http:HTTP_1_1});
     a2a:Task|a2a:Message|a2a:Error j1 = jc->sendMessage(msg("ct-1"));
     a2a:Task|a2a:Message|a2a:Error j2 = jc->sendMessage(msg("ct-2"));
     a2a:Task|a2a:Message|a2a:Error j3 = jc->sendMessage(msg("ct-3"));

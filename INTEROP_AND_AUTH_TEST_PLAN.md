@@ -118,7 +118,7 @@ a 70s+ silent stream against a foreign parser; wrong-media-type requests; X-A4.
 client-credentials + JWKS flow works from both this client and the real Python client (acquire, cache, expiry,
 scope, key rotation); TLS and mutual TLS work. Three findings, detailed in `interop/RESULTS.md` 10-12:
 
-- **Panic on a bad OAuth2 client secret / unreachable issuer** escapes `a2a:HttpClient`'s typed-error contract. *Fixed, `9a90e33`.*
+- **Panic on a bad OAuth2 client secret / unreachable issuer** escapes `a2a:RestClient`'s typed-error contract. *Fixed, `9a90e33`.*
 - **A TLS `Listener` advertises `http://`** in its card, so clients cannot use it without a manual fix (spec 7.1). *Fixed, `94b0212`, with a new `publicUrl` setting.*
 - **The Java reference server rejects `application/a2a+json` (415)**; our fallback is what made pair B pass.
 
@@ -206,8 +206,8 @@ failures). Not run: TCK `extended` mode, which cannot start because a listener w
 
 | Id | Client | Server | Purpose |
 |---|---|---|---|
-| A | Ballerina `a2a:HttpClient` | Python SDK agent | Does our client understand a real server? |
-| B | Ballerina `a2a:HttpClient` | Java SDK agent | Same, second implementation |
+| A | Ballerina `a2a:RestClient` | Python SDK agent | Does our client understand a real server? |
+| B | Ballerina `a2a:RestClient` | Java SDK agent | Same, second implementation |
 | C | Python SDK client | Ballerina `a2a:Listener` | Does a real client understand our server? |
 | D | Java SDK client | Ballerina `a2a:Listener` | Same, second implementation |
 | Ctl | Python client | Python agent (and Java/Java) | **Control.** When a scenario fails in A-D, run it here first. If the control fails too, the scenario or the SDK is at fault, not us |
@@ -363,7 +363,7 @@ card configured.
 | S-A14 | API-key scheme (header) declared on the card | enforced by the small custom check; missing or wrong key -> 401 |
 | S-A15 | Mutual TLS (`mutualSsl`, `verifyClient = REQUIRE`) | call without a client certificate fails at the TLS layer (needs the HTTPS follow-up) |
 
-### 2.3 Client-side tests (`a2a:HttpClient`)
+### 2.3 Client-side tests (`a2a:RestClient`)
 
 Against our listener with auth, and against the Python agent with auth (a Starlette middleware checking a
 static bearer token, **(verify)** the cleanest way in SDK 1.1.5).

@@ -273,10 +273,10 @@ the Python protobuf parser rejecting the old flat shape and accepting the new on
 - `returnImmediately` on a *streaming* send still delivers the whole stream to a caller who drains it;
   to observe the task before it finishes, take only the first event.
 
-**10. (Defect, escapes `a2a:HttpClient`'s contract) A refused or unreachable OAuth2 token endpoint makes client
+**10. (Defect, escapes `a2a:RestClient`'s contract) A refused or unreachable OAuth2 token endpoint makes client
 construction *panic*.** `ballerina/oauth2` fetches the first token while the client is being built, and
 `ClientOAuth2Handler.init` has no error return, so a failure (wrong client secret, issuer down) is a panic, not a
-returned error. Isolated with `trap`: a plain `http:Client` panics too, and so does `a2a:HttpClient`, whose `init`
+returned error. Isolated with `trap`: a plain `http:Client` panics too, and so does `a2a:RestClient`, whose `init`
 documents a typed `Error?` and whose README says no operation returns a bare error. The cause is in `ballerina/http` +
 `ballerina/oauth2`, but this library can contain it (`trap` around the `http:Client` creation in `HttpClient.init` and
 in card resolution). Practically: a mistyped client secret or an issuer outage at start-up crashes the caller instead
@@ -447,7 +447,7 @@ inconsistent elsewhere: section 6 examples use `application/problem+json` and a 
 
 **21. (Defect, ours; found by the Node agent) `HttpClient` builds `//message:send` when the card's interface URL ends in
 `/`, and the server answers 404.** `@a2a-js/sdk` advertises `http://localhost:9800/` for a root-mounted agent. Every
-operation from `a2a:HttpClient` then failed with `REST request failed with HTTP 404` (`curl` confirms `//message:send` is
+operation from `a2a:RestClient` then failed with `REST request failed with HTTP 404` (`curl` confirms `//message:send` is
 404, `/message:send` is 200). The reference `@a2a-js/sdk` client, given the same card, works. `http_client.bal` passes
 the URL straight to `http:Client` and appends paths that start with `/`. A root-mounted agent is the common case, so this
 would hit real users. Proposed fix: strip trailing `/` from the interface URL when building the client. Workaround used
@@ -810,7 +810,7 @@ Both listeners from one `http:Listener` (`/rest`, `/rpc`), against the bala pack
 | `a2a-dotnet`, JSON-RPC | 23/25: one rig assertion (expects the REST client class), one SDK gap (finding 49) |
 | `a2a-rs` (`a2a-client-lf` 0.2.5), JSON-RPC | all pass |
 | `a2a-rs`, HTTP+JSON | 26/27: the known legacy-subscribe fallback, R3 |
-| Real LLM (Operations Desk, Claude Haiku 4.5), one request per client | Python (3 runs incl. input-required continuation), JS (JSON-RPC stream), Go (REST), Java (JSON-RPC), .NET (JSON-RPC), Rust (JSON-RPC), and the chat agent through `a2a:HttpClient`: all completed with the correct incident summary |
+| Real LLM (Operations Desk, Claude Haiku 4.5), one request per client | Python (3 runs incl. input-required continuation), JS (JSON-RPC stream), Go (REST), Java (JSON-RPC), .NET (JSON-RPC), Rust (JSON-RPC), and the chat agent through `a2a:RestClient`: all completed with the correct incident summary |
 
 ### Findings
 

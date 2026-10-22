@@ -312,7 +312,7 @@ import ballerina/io;
 
 public function main() returns error? {
     a2a:AgentCard card = check a2a:resolveAgentCard("http://localhost:9611");
-    a2a:HttpClient client = check new (card);
+    a2a:RestClient client = check new (card);
     a2a:Task|a2a:Message reply = check client->sendMessage({
         message: {messageId: "hello-1", role: a2a:ROLE_USER, parts: [{text: "Hello"}]}
     });

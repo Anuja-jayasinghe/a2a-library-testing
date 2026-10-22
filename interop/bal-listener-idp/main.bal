@@ -62,7 +62,7 @@ isolated class IdpAgent {
 
         if id.startsWith("idp-chain") {
             check updater->working();
-            a2a:HttpClient|a2a:Error downstream = new (downstreamUrl, clientConfig = {
+            a2a:RestClient|a2a:Error downstream = new (downstreamUrl, clientConfig = {
                 auth: {tokenUrl, clientId, clientSecret, scopes: ["a2a:invoke"]}
             });
             string seen;

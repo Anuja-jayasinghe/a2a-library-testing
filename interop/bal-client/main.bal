@@ -20,7 +20,7 @@ public function main() returns error? {
     io:println("name: ", card.name, " | streaming: ", card.capabilities.streaming,
             " | push: ", card.capabilities.pushNotifications);
 
-    a2a:HttpClient c = check new (card);
+    a2a:RestClient c = check new (card);
 
     io:println("== I2: blocking send -> direct Message ==");
     a2a:Task|a2a:Message|a2a:Error r1 = c->sendMessage({

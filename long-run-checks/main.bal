@@ -149,14 +149,14 @@ isolated function isTerminal(a2a:TaskState s) returns boolean =>
     s == a2a:TASK_STATE_COMPLETED || s == a2a:TASK_STATE_FAILED
     || s == a2a:TASK_STATE_CANCELED || s == a2a:TASK_STATE_REJECTED;
 
-isolated function stateOf(a2a:HttpClient c, string id) returns string {
+isolated function stateOf(a2a:RestClient c, string id) returns string {
     a2a:Task|a2a:Error t = c->getTask({id});
     return t is a2a:Task ? t.status.state.toString() : "getTask failed: " + t.message();
 }
 
 // ---- scenarios ----------------------------------------------------------
 
-isolated function runStream(a2a:HttpClient c, string text) returns error? {
+isolated function runStream(a2a:RestClient c, string text) returns error? {
     say(string `sendStreamingMessage("${text}")`);
     stream<a2a:StreamResponse, a2a:Error?>|a2a:Error s = c->sendStreamingMessage({message: userMessage(text)});
     if s is a2a:Error {
@@ -166,7 +166,7 @@ isolated function runStream(a2a:HttpClient c, string text) returns error? {
     _ = drain("stream", s);
 }
 
-isolated function runPush(a2a:HttpClient c) returns error? {
+isolated function runPush(a2a:RestClient c) returns error? {
     string hook = string `http://localhost:${webhookPort}/hook`;
 
     say("A: send \"input please\" -> expect a task paused at INPUT_REQUIRED");
@@ -218,7 +218,7 @@ isolated function runPush(a2a:HttpClient c) returns error? {
     }
 }
 
-isolated function runSubscribe(a2a:HttpClient c) returns error? {
+isolated function runSubscribe(a2a:RestClient c) returns error? {
     a2a:Task|a2a:Message r = check c->sendMessage({
         message: userMessage("steady work"),
         configuration: {returnImmediately: true}
@@ -243,7 +243,7 @@ isolated function runSubscribe(a2a:HttpClient c) returns error? {
     }
 }
 
-isolated function subscribeAndDrain(a2a:HttpClient c, string id, string label) returns int {
+isolated function subscribeAndDrain(a2a:RestClient c, string id, string label) returns int {
     stream<a2a:StreamResponse, a2a:Error?>|a2a:Error s = c->subscribeToTask({id});
     if s is a2a:Error {
         say(string `${label}: subscribe failed: ${errKind(s)}: ${s.message()}`);
@@ -252,7 +252,7 @@ isolated function subscribeAndDrain(a2a:HttpClient c, string id, string label) r
     return drain(label, s);
 }
 
-isolated function runCancel(a2a:HttpClient c) returns error? {
+isolated function runCancel(a2a:RestClient c) returns error? {
     string hook = string `http://localhost:${webhookPort}/hook`;
     a2a:Task|a2a:Message r = check c->sendMessage({
         message: userMessage("steady work"),
@@ -310,7 +310,7 @@ isolated function runToolkitContinue() returns error? {
             any|error result = fn:call(t.caller, agentName, "Paris", taskId);
             say("the model would receive: " + (result is error ? "ERROR " + result.message() : result.toString()));
             runtime:sleep(4);
-            a2a:HttpClient c = check new (agentUrl);
+            a2a:RestClient c = check new (agentUrl);
             say("4s later the task's real state is: " + stateOf(c, taskId));
         }
     }
@@ -318,7 +318,7 @@ isolated function runToolkitContinue() returns error? {
 
 public function main() returns error? {
     check webhookListener.'start();
-    a2a:HttpClient c = check new (agentUrl, clientConfig = {timeout: clientTimeout});
+    a2a:RestClient c = check new (agentUrl, clientConfig = {timeout: clientTimeout});
     say(string `scenario=${scenario} agent=${agentUrl}`);
     match scenario {
         "stream" => {

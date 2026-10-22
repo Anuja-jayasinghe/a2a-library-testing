@@ -18,7 +18,7 @@ function trusting() returns http:ClientConfiguration => {secureSocket: {cert: ce
 function withClientCert() returns http:ClientConfiguration => {secureSocket: {
     cert: certDir + "/ca.pem", key: {certFile: certDir + "/client.pem", keyFile: certDir + "/client.key"}}};
 
-function send(a2a:HttpClient c) returns a2a:Task|a2a:Message|a2a:Error {
+function send(a2a:RestClient c) returns a2a:Task|a2a:Message|a2a:Error {
     return c->sendMessage({message: {messageId: "tls-1", role: a2a:ROLE_USER, parts: [{text: "hi"}]}});
 }
 
@@ -36,8 +36,8 @@ public function main() returns error? {
         expect("the card advertises an https:// interface URL (spec 7.1)", scheme(card) == "https",
                 "advertises " + card.supportedInterfaces[0].url);
     }
-    a2a:HttpClient|a2a:Error viaUrl = new (tls, clientConfig = trusting());
-    if viaUrl is a2a:HttpClient {
+    a2a:RestClient|a2a:Error viaUrl = new (tls, clientConfig = trusting());
+    if viaUrl is a2a:RestClient {
         a2a:Task|a2a:Message|a2a:Error r = send(viaUrl);
         expect("a client built from the https URL can send (it follows the card's URL)", r is a2a:Task,
                 r is a2a:Error ? r.message().substring(0, 70) : "");
@@ -68,7 +68,7 @@ public function main() returns error? {
     expect("a valid client certificate is accepted", withCert is a2a:AgentCard, withCert is a2a:Error ? withCert.message() : "");
     if withCert is a2a:AgentCard {
         withCert.supportedInterfaces[0].url = mtls + "/rest";
-        a2a:HttpClient m = check new (withCert, clientConfig = withClientCert());
+        a2a:RestClient m = check new (withCert, clientConfig = withClientCert());
         a2a:Task|a2a:Message|a2a:Error r = send(m);
         expect("a send over mutual TLS works", r is a2a:Task, r is a2a:Error ? r.message() : "");
     }

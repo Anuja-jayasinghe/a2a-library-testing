@@ -8,7 +8,7 @@ public function main() returns error? {
     a2a:AgentCard card = check a2a:resolveAgentCard(url, clientConfig = {httpVersion: "1.1"});
     io:println("name: ", card.name, " | streaming: ", card.capabilities.streaming);
 
-    a2a:HttpClient c = check new (card, clientConfig = {httpVersion: "1.1"});
+    a2a:RestClient c = check new (card, clientConfig = {httpVersion: "1.1"});
 
     io:println("== I2/I3: blocking send ==");
     a2a:Task|a2a:Message|a2a:Error r1 = c->sendMessage({

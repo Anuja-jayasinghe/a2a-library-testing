@@ -28,7 +28,7 @@ function issued() returns int|error {
     return check (check stats.issued).ensureType(int);
 }
 
-function clientFor(string id, string secret, string scope) returns a2a:HttpClient|error {
+function clientFor(string id, string secret, string scope) returns a2a:RestClient|error {
     // Nothing but the documented OAuth2 grant config: the client obtains, caches and
     // refreshes the token itself (ballerina/http + ballerina/oauth2).
     return new (agentUrl, clientConfig = {
@@ -36,14 +36,14 @@ function clientFor(string id, string secret, string scope) returns a2a:HttpClien
     });
 }
 
-function send(a2a:HttpClient c, string id) returns a2a:Task|a2a:Message|a2a:Error {
+function send(a2a:RestClient c, string id) returns a2a:Task|a2a:Message|a2a:Error {
     return c->sendMessage({message: {messageId: id, role: a2a:ROLE_USER, parts: [{text: "hi"}]}});
 }
 
 public function main() returns error? {
     io:println("== token acquired by the client itself (OAuth2 client_credentials), validated via JWKS ==");
     int before = check issued();
-    a2a:HttpClient c = check clientFor("agent-a", "agent-a-secret", "a2a:invoke");
+    a2a:RestClient c = check clientFor("agent-a", "agent-a-secret", "a2a:invoke");
     // Constructing the client already fetched a token: ballerina/oauth2 acquires eagerly at init.
     int afterConstruct = check issued();
     expect("constructing the client fetched a token from the issuer up front", afterConstruct > before,
@@ -68,7 +68,7 @@ public function main() returns error? {
             && afterExpiry > afterSecond, r3 is a2a:Error ? r3.message() : string `issued ${afterSecond} -> ${afterExpiry}`);
 
     io:println("== scope: a token with only a2a:read against a listener that requires a2a:invoke ==");
-    a2a:HttpClient reader = check clientFor("reader", "reader-secret", "a2a:read");
+    a2a:RestClient reader = check clientFor("reader", "reader-secret", "a2a:read");
     a2a:Task|a2a:Message|a2a:Error r4 = send(reader, "oidc-4");
     expect("insufficient scope is an AuthorizationError (403)", r4 is a2a:AuthorizationError,
             r4 is a2a:Error ? r4.message() : "unexpectedly succeeded");
@@ -76,17 +76,17 @@ public function main() returns error? {
     io:println("== wrong client secret: the issuer refuses the token request ==");
     // ballerina/oauth2 fetches the first token while the client is being constructed. `trap`
     // is only here so a panic cannot end this run; the assertion is the documented contract:
-    // a2a:HttpClient's init returns a typed a2a:Error, it does not panic.
-    a2a:HttpClient|error bad = trap clientFor("agent-a", "not-the-secret", "a2a:invoke");
+    // a2a:RestClient's init returns a typed a2a:Error, it does not panic.
+    a2a:RestClient|error bad = trap clientFor("agent-a", "not-the-secret", "a2a:invoke");
     expect("a refused token request is a returned a2a:Error (HttpClient's documented contract)", bad is a2a:Error,
             bad is error ? "it escaped as a PANIC: " + bad.message().substring(0, 50) : "constructed successfully");
-    a2a:HttpClient|error unreachable = trap new (agentUrl, clientConfig = {
+    a2a:RestClient|error unreachable = trap new (agentUrl, clientConfig = {
         auth: {tokenUrl: "http://localhost:1/token", clientId: "agent-a", clientSecret: "x"}});
     expect("an unreachable token endpoint is a returned a2a:Error too", unreachable is a2a:Error,
             unreachable is error ? "it escaped as a PANIC" : "constructed successfully");
 
     io:println("== no credential at all ==");
-    a2a:HttpClient anon = check new (agentUrl);
+    a2a:RestClient anon = check new (agentUrl);
     a2a:Task|a2a:Message|a2a:Error r6 = send(anon, "oidc-6");
     expect("AuthenticationError (401)", r6 is a2a:AuthenticationError, r6 is a2a:Error ? r6.message() : "succeeded");
 
