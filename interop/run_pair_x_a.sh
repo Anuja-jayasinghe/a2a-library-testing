@@ -3,7 +3,7 @@
 # Part 2:
 #   X-A1: the real a2a-sdk 1.1.5 Client's own AuthInterceptor/CredentialService
 #         -> ballerina/a2a's Listener with `auth` configured (bal-listener-auth/)
-#   X-A3: ballerina/a2a's HttpClient (credentials = InMemoryCredentialStore)
+#   X-A3: ballerina/a2a's RestClient (credentials = InMemoryCredentialStore)
 #         -> a real a2a-sdk 1.1.5 agent that requires a bearer credential
 #         (python-agent/agent.py with INTEROP_REQUIRE_AUTH=1)
 #

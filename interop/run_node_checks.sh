@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Third-language pair, both directions, against @a2a-js/sdk 1.2.1 (HTTP+JSON, A2A v1.0):
-#   N-A: ballerina/a2a HttpClient      -> node-agent/agent.mjs  (Claude-backed if ANTHROPIC_API_KEY is set, else a stub)
+#   N-A: ballerina/a2a RestClient      -> node-agent/agent.mjs  (Claude-backed if ANTHROPIC_API_KEY is set, else a stub)
 #   N-C: @a2a-js/sdk client            -> ballerina/a2a Listener (bal-listener), incl. a 75s silent stream
 # Also: J-D, the real a2a-java client streaming against the listener (java-client-stream/StreamDriver.java, needs
 # /tmp/interop_java_client_cp.txt from run_pair_b_d.sh).

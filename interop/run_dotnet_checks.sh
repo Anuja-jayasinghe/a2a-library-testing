@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sixth-language pair, both directions, against a2a-dotnet (built from main 76de7f3; HTTP+JSON, A2A v1.0):
-#   D-A: ballerina/a2a HttpClient -> dotnet-agent (Claude-backed via the official Anthropic C# SDK if ANTHROPIC_API_KEY is set)
+#   D-A: ballerina/a2a RestClient -> dotnet-agent (Claude-backed via the official Anthropic C# SDK if ANTHROPIC_API_KEY is set)
 #   D-C: a2a-dotnet client        -> ballerina/a2a Listener
 # Runs in Docker (mcr.microsoft.com/dotnet/sdk:10.0). Build once with:
 #   cd dotnet-agent && docker run --rm -v "$PWD":/w -v ~/gitProject/a2a-dotnet:/sdk -v a2a-nuget:/root/.nuget/packages \

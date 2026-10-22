@@ -1,4 +1,4 @@
-// ballerina/a2a HttpClient against a deliberately awkward server (interop/hostile-server/hostile.py).
+// ballerina/a2a RestClient against a deliberately awkward server (interop/hostile-server/hostile.py).
 // Each case prints what the client did: OK (with the decoded state or events), ERR (the typed error and message),
 // or PANIC (trapped). The expected outcome, and the rule it comes from, is printed alongside so a reader can judge.
 import ballerina/a2a;

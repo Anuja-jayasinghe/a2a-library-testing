@@ -1,4 +1,4 @@
-// ballerina/a2a HttpClient -> a real @a2a-js/sdk 1.2.1 agent (interop/node-agent, HTTP+JSON, A2A v1.0).
+// ballerina/a2a RestClient -> a real @a2a-js/sdk 1.2.1 agent (interop/node-agent, HTTP+JSON, A2A v1.0).
 // Assertions are on protocol behaviour, never on reply wording.
 import ballerina/a2a;
 import ballerina/io;

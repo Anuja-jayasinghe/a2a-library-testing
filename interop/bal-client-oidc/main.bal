@@ -78,7 +78,7 @@ public function main() returns error? {
     // is only here so a panic cannot end this run; the assertion is the documented contract:
     // a2a:RestClient's init returns a typed a2a:Error, it does not panic.
     a2a:RestClient|error bad = trap clientFor("agent-a", "not-the-secret", "a2a:invoke");
-    expect("a refused token request is a returned a2a:Error (HttpClient's documented contract)", bad is a2a:Error,
+    expect("a refused token request is a returned a2a:Error (RestClient's documented contract)", bad is a2a:Error,
             bad is error ? "it escaped as a PANIC: " + bad.message().substring(0, 50) : "constructed successfully");
     a2a:RestClient|error unreachable = trap new (agentUrl, clientConfig = {
         auth: {tokenUrl: "http://localhost:1/token", clientId: "agent-a", clientSecret: "x"}});
