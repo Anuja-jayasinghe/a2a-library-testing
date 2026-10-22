@@ -220,67 +220,67 @@ isolated class TckAgentExecutor {
             return agentMessage("Direct message response");
         }
         if id.startsWith("tck-input-required") {
-            check updater->requireInput(agentMessage("Input required"));
+            check updater.requireInput(agentMessage("Input required"));
             return;
         }
         if id.startsWith("tck-reject-task") {
-            check updater->reject(agentMessage("rejected"));
+            check updater.reject(agentMessage("rejected"));
             return;
         }
         if id.startsWith("tck-complete-task") {
-            check updater->complete(agentMessage("Hello from TCK"));
+            check updater.complete(agentMessage("Hello from TCK"));
             return;
         }
         if id.startsWith("tck-artifact-file-url") {
-            check updater->addArtifact([{url: "https://example.com/output.txt",
+            check updater.addArtifact([{url: "https://example.com/output.txt",
                 mediaType: "text/plain", filename: "output.txt"}]);
-            check updater->complete();
+            check updater.complete();
             return;
         }
         if id.startsWith("tck-artifact-file") {
-            check updater->addArtifact([{raw: "tck".toBytes(), mediaType: "text/plain", filename: "output.txt"}]);
-            check updater->complete();
+            check updater.addArtifact([{raw: "tck".toBytes(), mediaType: "text/plain", filename: "output.txt"}]);
+            check updater.complete();
             return;
         }
         if id.startsWith("tck-artifact-data") {
-            check updater->addArtifact([{data: {"key": "value", "count": 42}}]);
-            check updater->complete();
+            check updater.addArtifact([{data: {"key": "value", "count": 42}}]);
+            check updater.complete();
             return;
         }
         if id.startsWith("tck-artifact-text") {
-            check updater->addArtifact([{text: "Generated text content"}]);
-            check updater->complete();
+            check updater.addArtifact([{text: "Generated text content"}]);
+            check updater.complete();
             return;
         }
 
         // Streaming scenarios: a "working" update, an artifact, "completed".
         if id.startsWith("test-resubscribe-message-id") {
-            check updater->working();
+            check updater.working();
             runtime:sleep(2 * streamingTimeout);
-            check updater->complete();
+            check updater.complete();
             return;
         }
         if id.startsWith("tck-stream-002") {
-            check updater->complete();
+            check updater.complete();
             return;
         }
         if id.startsWith("tck-stream-artifact-file") {
-            check updater->working();
-            check updater->addArtifact([{raw: "tck".toBytes(), mediaType: "text/plain", filename: "output.txt"}]);
-            check updater->complete();
+            check updater.working();
+            check updater.addArtifact([{raw: "tck".toBytes(), mediaType: "text/plain", filename: "output.txt"}]);
+            check updater.complete();
             return;
         }
         string? streamText = streamArtifactText(id);
         if streamText is string {
-            check updater->working();
-            check updater->addArtifact([{text: streamText}]);
-            check updater->complete();
+            check updater.working();
+            check updater.addArtifact([{text: streamText}]);
+            check updater.complete();
             return;
         }
 
         // Default: complete with an echo. The TCK's own setup messages
         // (for example "tck-send-001") rely on this.
-        check updater->complete(agentMessage("Unhandled messageId prefix: " + id));
+        check updater.complete(agentMessage("Unhandled messageId prefix: " + id));
         return;
     }
 }

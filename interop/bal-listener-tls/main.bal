@@ -16,9 +16,9 @@ isolated class InteropAgent {
     *a2a:AgentExecutor;
     public isolated function execute(a2a:RequestContext context, a2a:TaskUpdater updater)
             returns a2a:Message|a2a:Error? {
-        check updater->working();
-        check updater->addArtifact([{text: "secure hello"}], name = "result");
-        check updater->complete();
+        check updater.working();
+        check updater.addArtifact([{text: "secure hello"}], name = "result");
+        check updater.complete();
         return;
     }
 }

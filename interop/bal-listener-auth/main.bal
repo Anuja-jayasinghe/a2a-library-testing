@@ -24,9 +24,9 @@ isolated class InteropAgent {
                 text += t;
             }
         }
-        check updater->working();
-        check updater->addArtifact([{text: string `echo: ${text}`}], name = "result");
-        check updater->complete();
+        check updater.working();
+        check updater.addArtifact([{text: string `echo: ${text}`}], name = "result");
+        check updater.complete();
         return;
     }
 }

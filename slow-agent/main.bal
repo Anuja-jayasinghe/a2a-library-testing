@@ -70,18 +70,18 @@ isolated class SlowWorkerExecutor {
         log:printInfo("slow-agent: received", taskId = taskId, continuation = continuation, request = text);
 
         if !continuation && text.includes("input") {
-            check updater->requireInput(agentMessage("Say go to start the long job."));
+            check updater.requireInput(agentMessage("Say go to start the long job."));
             log:printInfo("slow-agent: paused for input", taskId = taskId);
             return;
         }
 
-        check updater->working(agentMessage("starting"));
+        check updater.working(agentMessage("starting"));
         if text.includes("silent") {
             runtime:sleep(silentSeconds);
         } else {
             foreach int i in 1 ... steps {
                 runtime:sleep(stepSeconds);
-                a2a:Error? progress = updater->working(agentMessage(string `step ${i} of ${steps}`));
+                a2a:Error? progress = updater.working(agentMessage(string `step ${i} of ${steps}`));
                 if progress is a2a:Error {
                     log:printInfo("slow-agent: stopping, the task is no longer running",
                             taskId = taskId, reason = progress.message());
@@ -90,13 +90,13 @@ isolated class SlowWorkerExecutor {
             }
         }
 
-        a2a:Error? done = updater->addArtifact([{text: "long job finished"}]);
+        a2a:Error? done = updater.addArtifact([{text: "long job finished"}]);
         if done is a2a:Error {
             log:printInfo("slow-agent: finished but the task was already closed",
                     taskId = taskId, reason = done.message());
             return;
         }
-        check updater->complete();
+        check updater.complete();
         log:printInfo("slow-agent: completed", taskId = taskId);
         return;
     }

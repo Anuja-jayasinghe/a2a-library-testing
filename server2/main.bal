@@ -75,7 +75,7 @@ isolated class PackingAssistantAgentExecutor {
 
     public isolated function execute(a2a:RequestContext context, a2a:TaskUpdater updater)
             returns a2a:Message|a2a:Error? {
-        check updater->working();
+        check updater.working();
 
         string userText = extractText(context.message);
         string taskId = updater.getTaskId();
@@ -88,7 +88,7 @@ isolated class PackingAssistantAgentExecutor {
         if reply is error {
             log:printError("Packing Assistant: task failed", taskId = taskId, reason = reply.message());
             string msg = string `packing assistant model call failed: ${reply.message()}`;
-            check updater->failed({
+            check updater.failed({
                 messageId: uuid:createType4AsString(),
                 role: a2a:ROLE_AGENT,
                 parts: [{text: msg}]
@@ -100,7 +100,7 @@ isolated class PackingAssistantAgentExecutor {
         log:printInfo("Packing Assistant: Claude replied", taskId = taskId, reply = trimmed);
         if trimmed.startsWith("NEEDS_INFO:") {
             log:printInfo("Packing Assistant: task needs input (INPUT_REQUIRED)", taskId = taskId);
-            check updater->requireInput({
+            check updater.requireInput({
                 messageId: uuid:createType4AsString(),
                 role: a2a:ROLE_AGENT,
                 parts: [{text: trimmed.substring("NEEDS_INFO:".length()).trim()}]
@@ -111,8 +111,8 @@ isolated class PackingAssistantAgentExecutor {
         string packingList = trimmed.startsWith("PACKING_LIST:")
             ? trimmed.substring("PACKING_LIST:".length()).trim()
             : trimmed;
-        check updater->addArtifact([{text: packingList}]);
-        check updater->complete();
+        check updater.addArtifact([{text: packingList}]);
+        check updater.complete();
         log:printInfo("Packing Assistant: task completed (COMPLETED)", taskId = taskId);
         return;
     }

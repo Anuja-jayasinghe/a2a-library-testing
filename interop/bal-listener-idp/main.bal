@@ -44,16 +44,16 @@ isolated class IdpAgent {
         string owner = context?.owner ?: "(none)";
 
         if id.startsWith("idp-whoami") {
-            check updater->working();
-            check updater->addArtifact([{text: owner}], name = "owner");
-            check updater->complete();
+            check updater.working();
+            check updater.addArtifact([{text: owner}], name = "owner");
+            check updater.complete();
             return;
         }
 
         // Spec 7.6: the agent needs a further credential mid-task (e.g. a third-party account).
         if id.startsWith("idp-auth-required") {
-            check updater->working();
-            check updater->requireAuth({
+            check updater.working();
+            check updater.requireAuth({
                 messageId: "auth-1", role: a2a:ROLE_AGENT,
                 parts: [{text: "link your calendar account, then reply with the credential"}]
             });
@@ -61,7 +61,7 @@ isolated class IdpAgent {
         }
 
         if id.startsWith("idp-chain") {
-            check updater->working();
+            check updater.working();
             a2a:RestClient|a2a:Error downstream = new (downstreamUrl, clientConfig = {
                 auth: {tokenUrl, clientId, clientSecret, scopes: ["a2a:invoke"]}
             });
@@ -81,15 +81,15 @@ isolated class IdpAgent {
                     seen = "downstream replied with a message";
                 }
             }
-            check updater->addArtifact([{text: string `my caller: ${owner}; downstream saw: ${seen}`}], name = "chain");
-            check updater->complete();
+            check updater.addArtifact([{text: string `my caller: ${owner}; downstream saw: ${seen}`}], name = "chain");
+            check updater.complete();
             return;
         }
 
         // Default, and the continuation of an AUTH_REQUIRED task: echo what was sent back.
-        check updater->working();
-        check updater->addArtifact([{text: string `echo: ${text}`}], name = "result");
-        check updater->complete();
+        check updater.working();
+        check updater.addArtifact([{text: string `echo: ${text}`}], name = "result");
+        check updater.complete();
         return;
     }
 }

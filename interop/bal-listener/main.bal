@@ -29,8 +29,8 @@ isolated class InteropAgent {
         // handled by the else-branch below (any prefix), matching
         // tck-sut/python-agent's contract.
         if id.startsWith("interop-task-input-required") {
-            check updater->working();
-            check updater->requireInput({
+            check updater.working();
+            check updater.requireInput({
                 messageId: "ask-1", role: a2a:ROLE_AGENT, parts: [{text: "which city?"}]
             });
             return;
@@ -39,16 +39,16 @@ isolated class InteropAgent {
         // I4/I9/I13: a short, real delay before completing -- long enough to
         // poll or subscribe mid-flight.
         if id.startsWith("interop-task-paced") {
-            check updater->working();
+            check updater.working();
             runtime:sleep(PACE_SECONDS);
-            check updater->addArtifact([{text: string `echo: ${text}`}], name = "result");
-            check updater->complete();
+            check updater.addArtifact([{text: string `echo: ${text}`}], name = "result");
+            check updater.complete();
             return;
         }
 
         if id.startsWith("interop-task-fail") {
-            check updater->working();
-            check updater->failed({
+            check updater.working();
+            check updater.failed({
                 messageId: "fail-1", role: a2a:ROLE_AGENT, parts: [{text: "deliberate interop failure"}]
             });
             return;
@@ -56,9 +56,9 @@ isolated class InteropAgent {
 
         // Default: I3, and also the continuation reply for I10 (any
         // messageId, once context.message.taskId names an existing task).
-        check updater->working();
-        check updater->addArtifact([{text: string `echo: ${text}`}], name = "result");
-        check updater->complete();
+        check updater.working();
+        check updater.addArtifact([{text: string `echo: ${text}`}], name = "result");
+        check updater.complete();
         return;
     }
 }
