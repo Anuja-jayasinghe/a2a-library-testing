@@ -70,18 +70,18 @@ isolated class SlowWorkerExecutor {
         log:printInfo("slow-agent: received", taskId = taskId, continuation = continuation, request = text);
 
         if !continuation && text.includes("input") {
-            check updater->requireInput(agentMessage("Say go to start the long job."));
+            check updater.requireInput(agentMessage("Say go to start the long job."));
             log:printInfo("slow-agent: paused for input", taskId = taskId);
             return;
         }
 
-        check updater->working(agentMessage("starting"));
+        check updater.working(agentMessage("starting"));
         if text.includes("silent") {
             runtime:sleep(silentSeconds);
         } else {
             foreach int i in 1 ... steps {
                 runtime:sleep(stepSeconds);
-                a2a:Error? progress = updater->working(agentMessage(string `step ${i} of ${steps}`));
+                a2a:Error? progress = updater.working(agentMessage(string `step ${i} of ${steps}`));
                 if progress is a2a:Error {
                     log:printInfo("slow-agent: stopping, the task is no longer running",
                             taskId = taskId, reason = progress.message());
@@ -90,13 +90,13 @@ isolated class SlowWorkerExecutor {
             }
         }
 
-        a2a:Error? done = updater->addArtifact([{text: "long job finished"}]);
+        a2a:Error? done = updater.addArtifact([{text: "long job finished"}]);
         if done is a2a:Error {
             log:printInfo("slow-agent: finished but the task was already closed",
                     taskId = taskId, reason = done.message());
             return;
         }
-        check updater->complete();
+        check updater.complete();
         log:printInfo("slow-agent: completed", taskId = taskId);
         return;
     }
@@ -136,51 +136,51 @@ isolated service class AgentOperations {
 
     isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
             returns a2a:Task|a2a:Message|a2a:Error {
-        return self.handler.sendMessage(context, request);
+        return self.handler.onSendMessage(context, request);
     }
 
     isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
             returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error {
-        return self.handler.sendStreamingMessage(context, request);
+        return self.handler.onSendStreamingMessage(context, request);
     }
 
     isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
             returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error {
-        return self.handler.subscribeToTask(context, request);
+        return self.handler.onSubscribeToTask(context, request);
     }
 
     isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
             returns a2a:Task|a2a:Error {
-        return self.handler.getTask(context, request);
+        return self.handler.onGetTask(context, request);
     }
 
     isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
             returns a2a:ListTasksResponse|a2a:Error {
-        return self.handler.listTasks(context, request);
+        return self.handler.onListTasks(context, request);
     }
 
     isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
             returns a2a:Task|a2a:Error {
-        return self.handler.cancelTask(context, request);
+        return self.handler.onCancelTask(context, request);
     }
 
     isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context, a2a:TaskPushNotificationConfig request)
             returns a2a:TaskPushNotificationConfig|a2a:Error {
-        return self.handler.createTaskPushNotificationConfig(context, request);
+        return self.handler.onCreateTaskPushNotificationConfig(context, request);
     }
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context, a2a:GetTaskPushNotificationConfigRequest request)
             returns a2a:TaskPushNotificationConfig|a2a:Error {
-        return self.handler.getTaskPushNotificationConfig(context, request);
+        return self.handler.onGetTaskPushNotificationConfig(context, request);
     }
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context, a2a:ListTaskPushNotificationConfigsRequest request)
             returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error {
-        return self.handler.listTaskPushNotificationConfigs(context, request);
+        return self.handler.onListTaskPushNotificationConfigs(context, request);
     }
 
     isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context, a2a:DeleteTaskPushNotificationConfigRequest request)
             returns a2a:Error? {
-        return self.handler.deleteTaskPushNotificationConfig(context, request);
+        return self.handler.onDeleteTaskPushNotificationConfig(context, request);
     }
 }

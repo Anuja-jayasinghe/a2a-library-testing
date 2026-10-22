@@ -44,16 +44,16 @@ isolated class IdpAgent {
         string owner = context?.owner ?: "(none)";
 
         if id.startsWith("idp-whoami") {
-            check updater->working();
-            check updater->addArtifact([{text: owner}], name = "owner");
-            check updater->complete();
+            check updater.working();
+            check updater.addArtifact([{text: owner}], name = "owner");
+            check updater.complete();
             return;
         }
 
         // Spec 7.6: the agent needs a further credential mid-task (e.g. a third-party account).
         if id.startsWith("idp-auth-required") {
-            check updater->working();
-            check updater->requireAuth({
+            check updater.working();
+            check updater.requireAuth({
                 messageId: "auth-1", role: a2a:ROLE_AGENT,
                 parts: [{text: "link your calendar account, then reply with the credential"}]
             });
@@ -61,8 +61,8 @@ isolated class IdpAgent {
         }
 
         if id.startsWith("idp-chain") {
-            check updater->working();
-            a2a:HttpClient|a2a:Error downstream = new (downstreamUrl, clientConfig = {
+            check updater.working();
+            a2a:RestClient|a2a:Error downstream = new (downstreamUrl, clientConfig = {
                 auth: {tokenUrl, clientId, clientSecret, scopes: ["a2a:invoke"]}
             });
             string seen;
@@ -81,15 +81,15 @@ isolated class IdpAgent {
                     seen = "downstream replied with a message";
                 }
             }
-            check updater->addArtifact([{text: string `my caller: ${owner}; downstream saw: ${seen}`}], name = "chain");
-            check updater->complete();
+            check updater.addArtifact([{text: string `my caller: ${owner}; downstream saw: ${seen}`}], name = "chain");
+            check updater.complete();
             return;
         }
 
         // Default, and the continuation of an AUTH_REQUIRED task: echo what was sent back.
-        check updater->working();
-        check updater->addArtifact([{text: string `echo: ${text}`}], name = "result");
-        check updater->complete();
+        check updater.working();
+        check updater.addArtifact([{text: string `echo: ${text}`}], name = "result");
+        check updater.complete();
         return;
     }
 }
@@ -140,51 +140,51 @@ isolated service class AgentOperations {
 
     isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
             returns a2a:Task|a2a:Message|a2a:Error {
-        return self.handler.sendMessage(context, request);
+        return self.handler.onSendMessage(context, request);
     }
 
     isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
             returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error {
-        return self.handler.sendStreamingMessage(context, request);
+        return self.handler.onSendStreamingMessage(context, request);
     }
 
     isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
             returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error {
-        return self.handler.subscribeToTask(context, request);
+        return self.handler.onSubscribeToTask(context, request);
     }
 
     isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
             returns a2a:Task|a2a:Error {
-        return self.handler.getTask(context, request);
+        return self.handler.onGetTask(context, request);
     }
 
     isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
             returns a2a:ListTasksResponse|a2a:Error {
-        return self.handler.listTasks(context, request);
+        return self.handler.onListTasks(context, request);
     }
 
     isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
             returns a2a:Task|a2a:Error {
-        return self.handler.cancelTask(context, request);
+        return self.handler.onCancelTask(context, request);
     }
 
     isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context, a2a:TaskPushNotificationConfig request)
             returns a2a:TaskPushNotificationConfig|a2a:Error {
-        return self.handler.createTaskPushNotificationConfig(context, request);
+        return self.handler.onCreateTaskPushNotificationConfig(context, request);
     }
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context, a2a:GetTaskPushNotificationConfigRequest request)
             returns a2a:TaskPushNotificationConfig|a2a:Error {
-        return self.handler.getTaskPushNotificationConfig(context, request);
+        return self.handler.onGetTaskPushNotificationConfig(context, request);
     }
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context, a2a:ListTaskPushNotificationConfigsRequest request)
             returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error {
-        return self.handler.listTaskPushNotificationConfigs(context, request);
+        return self.handler.onListTaskPushNotificationConfigs(context, request);
     }
 
     isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context, a2a:DeleteTaskPushNotificationConfigRequest request)
             returns a2a:Error? {
-        return self.handler.deleteTaskPushNotificationConfig(context, request);
+        return self.handler.onDeleteTaskPushNotificationConfig(context, request);
     }
 }

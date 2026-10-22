@@ -103,16 +103,16 @@ isolated service class TckBaseService {
     isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error => buildCard([tckSkill]);
 
     isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
-            returns a2a:Task|a2a:Message|a2a:Error => self.handler.sendMessage(context, request);
+            returns a2a:Task|a2a:Message|a2a:Error => self.handler.onSendMessage(context, request);
 
     isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.getTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onGetTask(context, request);
 
     isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
-            returns a2a:ListTasksResponse|a2a:Error => self.handler.listTasks(context, request);
+            returns a2a:ListTasksResponse|a2a:Error => self.handler.onListTasks(context, request);
 
     isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.cancelTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onCancelTask(context, request);
 }
 
 isolated service class TckFullService {
@@ -126,38 +126,38 @@ isolated service class TckFullService {
     isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error => buildCard([tckSkill]);
 
     isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
-            returns a2a:Task|a2a:Message|a2a:Error => self.handler.sendMessage(context, request);
+            returns a2a:Task|a2a:Message|a2a:Error => self.handler.onSendMessage(context, request);
 
     isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
-            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.sendStreamingMessage(context, request);
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.onSendStreamingMessage(context, request);
 
     isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
-            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.subscribeToTask(context, request);
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.onSubscribeToTask(context, request);
 
     isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.getTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onGetTask(context, request);
 
     isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
-            returns a2a:ListTasksResponse|a2a:Error => self.handler.listTasks(context, request);
+            returns a2a:ListTasksResponse|a2a:Error => self.handler.onListTasks(context, request);
 
     isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.cancelTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onCancelTask(context, request);
 
     isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context,
             a2a:TaskPushNotificationConfig request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
-        self.handler.createTaskPushNotificationConfig(context, request);
+        self.handler.onCreateTaskPushNotificationConfig(context, request);
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
             a2a:GetTaskPushNotificationConfigRequest request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
-        self.handler.getTaskPushNotificationConfig(context, request);
+        self.handler.onGetTaskPushNotificationConfig(context, request);
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context,
             a2a:ListTaskPushNotificationConfigsRequest request) returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error =>
-        self.handler.listTaskPushNotificationConfigs(context, request);
+        self.handler.onListTaskPushNotificationConfigs(context, request);
 
     isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
             a2a:DeleteTaskPushNotificationConfigRequest request) returns a2a:Error? =>
-        self.handler.deleteTaskPushNotificationConfig(context, request);
+        self.handler.onDeleteTaskPushNotificationConfig(context, request);
 }
 
 isolated service class TckExtendedService {
@@ -171,41 +171,41 @@ isolated service class TckExtendedService {
     isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error => buildCard([tckSkill]);
 
     isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
-            returns a2a:Task|a2a:Message|a2a:Error => self.handler.sendMessage(context, request);
+            returns a2a:Task|a2a:Message|a2a:Error => self.handler.onSendMessage(context, request);
 
     isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
-            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.sendStreamingMessage(context, request);
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.onSendStreamingMessage(context, request);
 
     isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
-            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.subscribeToTask(context, request);
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.onSubscribeToTask(context, request);
 
     isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.getTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onGetTask(context, request);
 
     isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
-            returns a2a:ListTasksResponse|a2a:Error => self.handler.listTasks(context, request);
+            returns a2a:ListTasksResponse|a2a:Error => self.handler.onListTasks(context, request);
 
     isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.cancelTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onCancelTask(context, request);
 
     isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context,
             a2a:TaskPushNotificationConfig request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
-        self.handler.createTaskPushNotificationConfig(context, request);
+        self.handler.onCreateTaskPushNotificationConfig(context, request);
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
             a2a:GetTaskPushNotificationConfigRequest request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
-        self.handler.getTaskPushNotificationConfig(context, request);
+        self.handler.onGetTaskPushNotificationConfig(context, request);
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context,
             a2a:ListTaskPushNotificationConfigsRequest request) returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error =>
-        self.handler.listTaskPushNotificationConfigs(context, request);
+        self.handler.onListTaskPushNotificationConfigs(context, request);
 
     isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
             a2a:DeleteTaskPushNotificationConfigRequest request) returns a2a:Error? =>
-        self.handler.deleteTaskPushNotificationConfig(context, request);
+        self.handler.onDeleteTaskPushNotificationConfig(context, request);
 
     isolated resource function get extendedAgentCard(a2a:Context context, a2a:GetExtendedAgentCardRequest request)
-            returns a2a:AgentCard|a2a:Error => self.handler.getExtendedAgentCard(context, request);
+            returns a2a:AgentCard|a2a:Error => self.handler.onGetExtendedAgentCard(context, request);
 }
 
 isolated class TckAgentExecutor {
@@ -220,67 +220,67 @@ isolated class TckAgentExecutor {
             return agentMessage("Direct message response");
         }
         if id.startsWith("tck-input-required") {
-            check updater->requireInput(agentMessage("Input required"));
+            check updater.requireInput(agentMessage("Input required"));
             return;
         }
         if id.startsWith("tck-reject-task") {
-            check updater->reject(agentMessage("rejected"));
+            check updater.reject(agentMessage("rejected"));
             return;
         }
         if id.startsWith("tck-complete-task") {
-            check updater->complete(agentMessage("Hello from TCK"));
+            check updater.complete(agentMessage("Hello from TCK"));
             return;
         }
         if id.startsWith("tck-artifact-file-url") {
-            check updater->addArtifact([{url: "https://example.com/output.txt",
+            check updater.addArtifact([{url: "https://example.com/output.txt",
                 mediaType: "text/plain", filename: "output.txt"}]);
-            check updater->complete();
+            check updater.complete();
             return;
         }
         if id.startsWith("tck-artifact-file") {
-            check updater->addArtifact([{raw: "tck".toBytes(), mediaType: "text/plain", filename: "output.txt"}]);
-            check updater->complete();
+            check updater.addArtifact([{raw: "tck".toBytes(), mediaType: "text/plain", filename: "output.txt"}]);
+            check updater.complete();
             return;
         }
         if id.startsWith("tck-artifact-data") {
-            check updater->addArtifact([{data: {"key": "value", "count": 42}}]);
-            check updater->complete();
+            check updater.addArtifact([{data: {"key": "value", "count": 42}}]);
+            check updater.complete();
             return;
         }
         if id.startsWith("tck-artifact-text") {
-            check updater->addArtifact([{text: "Generated text content"}]);
-            check updater->complete();
+            check updater.addArtifact([{text: "Generated text content"}]);
+            check updater.complete();
             return;
         }
 
         // Streaming scenarios: a "working" update, an artifact, "completed".
         if id.startsWith("test-resubscribe-message-id") {
-            check updater->working();
+            check updater.working();
             runtime:sleep(2 * streamingTimeout);
-            check updater->complete();
+            check updater.complete();
             return;
         }
         if id.startsWith("tck-stream-002") {
-            check updater->complete();
+            check updater.complete();
             return;
         }
         if id.startsWith("tck-stream-artifact-file") {
-            check updater->working();
-            check updater->addArtifact([{raw: "tck".toBytes(), mediaType: "text/plain", filename: "output.txt"}]);
-            check updater->complete();
+            check updater.working();
+            check updater.addArtifact([{raw: "tck".toBytes(), mediaType: "text/plain", filename: "output.txt"}]);
+            check updater.complete();
             return;
         }
         string? streamText = streamArtifactText(id);
         if streamText is string {
-            check updater->working();
-            check updater->addArtifact([{text: streamText}]);
-            check updater->complete();
+            check updater.working();
+            check updater.addArtifact([{text: streamText}]);
+            check updater.complete();
             return;
         }
 
         // Default: complete with an echo. The TCK's own setup messages
         // (for example "tck-send-001") rely on this.
-        check updater->complete(agentMessage("Unhandled messageId prefix: " + id));
+        check updater.complete(agentMessage("Unhandled messageId prefix: " + id));
         return;
     }
 }

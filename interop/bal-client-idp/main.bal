@@ -47,34 +47,34 @@ function artifactText(a2a:Task t) returns string {
     return text;
 }
 
-function serviceClient(string url, string id, string secret, string scope) returns a2a:HttpClient|a2a:Error {
+function serviceClient(string url, string id, string secret, string scope) returns a2a:RestClient|a2a:Error {
     return new (url, clientConfig = {auth: {tokenUrl, clientId: id, clientSecret: secret, scopes: [scope]}});
 }
 
-function userClient(string url) returns a2a:HttpClient|a2a:Error {
+function userClient(string url) returns a2a:RestClient|a2a:Error {
     return new (url, clientConfig = {auth: {
         refreshUrl: tokenUrl, refreshToken: aliceRefreshToken, clientId: "a2a-webapp", clientSecret: "webapp-secret"
     }});
 }
 
-function send(a2a:HttpClient c, string id, string text = "hi", string? taskId = ())
+function send(a2a:RestClient c, string id, string text = "hi", string? taskId = ())
         returns a2a:Task|a2a:Message|a2a:Error {
     return c->sendMessage({message: {messageId: id, role: a2a:ROLE_USER, parts: [{text}], taskId}});
 }
 
 public function main() returns error? {
     io:println("== K2: our client -> a foreign agent that validates Keycloak tokens against the realm JWKS ==");
-    a2a:HttpClient toPy = check serviceClient(pyAgent, "agent-a", "agent-a-secret", "a2a:invoke");
+    a2a:RestClient toPy = check serviceClient(pyAgent, "agent-a", "agent-a-secret", "a2a:invoke");
     a2a:Task|a2a:Message|a2a:Error r1 = send(toPy, "k2-1");
     expect("a Keycloak client_credentials token, obtained by the client itself, is accepted by the Python agent",
             r1 is a2a:Task && r1.status.state == a2a:TASK_STATE_COMPLETED, r1 is a2a:Error ? r1.message() : "");
 
-    a2a:HttpClient reader = check serviceClient(pyAgent, "reader", "reader-secret", "a2a:read");
+    a2a:RestClient reader = check serviceClient(pyAgent, "reader", "reader-secret", "a2a:read");
     a2a:Task|a2a:Message|a2a:Error r2 = send(reader, "k2-2");
     expect("a valid token without the required scope is an AuthorizationError (403)", r2 is a2a:AuthorizationError,
             r2 is a2a:Error ? r2.message() : "succeeded");
 
-    a2a:HttpClient anon = check new (pyAgent);
+    a2a:RestClient anon = check new (pyAgent);
     a2a:Task|a2a:Message|a2a:Error r3 = send(anon, "k2-3");
     expect("no credential is an AuthenticationError (401)", r3 is a2a:AuthenticationError,
             r3 is a2a:Error ? r3.message() : "succeeded");
@@ -90,7 +90,7 @@ public function main() returns error? {
             reqs.toString());
 
     io:println("== K3: a user's credential, kept alive by the refresh-token grant ==");
-    a2a:HttpClient alice = check userClient(ourAgent);
+    a2a:RestClient alice = check userClient(ourAgent);
     a2a:Task|a2a:Message|a2a:Error w1 = send(alice, "idp-whoami-1");
     expect("the agent sees the user (the sub of the login), not a service", w1 is a2a:Task && artifactText(w1) == aliceSub,
             w1 is a2a:Task ? artifactText(w1) + " vs " + aliceSub : show(w1));

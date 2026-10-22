@@ -37,7 +37,7 @@ function textOf(a2a:Artifact? artifact) returns string {
 }
 
 public function main() returns error? {
-    a2a:HttpClient c = check new (agentUrl);
+    a2a:RestClient c = check new (agentUrl);
 
     io:println("== sendStreamingMessage (client) against a real server ==");
     stream<a2a:StreamResponse, a2a:Error?>|a2a:Error st = c->sendStreamingMessage({
@@ -185,7 +185,7 @@ public function main() returns error? {
     a2a:AgentCard noPushCard = check a2a:resolveAgentCard(noPushUrl);
     expect("server withholds push (card says so)", !noPushCard.capabilities.pushNotifications);
     noPushCard.capabilities.pushNotifications = true;
-    a2a:HttpClient liar = check new (noPushCard);
+    a2a:RestClient liar = check new (noPushCard);
     a2a:Task|a2a:Message|a2a:Error t = liar->sendMessage({
         message: {messageId: "interop-task-cancelable-np", role: a2a:ROLE_USER, parts: [{text: "x"}]},
         configuration: {returnImmediately: true}
@@ -199,7 +199,7 @@ public function main() returns error? {
 
     a2a:AgentCard noExtCard = check a2a:resolveAgentCard(noExtendedUrl);
     expect("server claims an extended card (card says so)", noExtCard.capabilities.extendedAgentCard);
-    a2a:HttpClient c3 = check new (noExtCard);
+    a2a:RestClient c3 = check new (noExtCard);
     a2a:AgentCard|a2a:Error ne = c3->getExtendedAgentCard();
     expect("ExtendedAgentCardNotConfiguredError from a real 400 + EXTENDED_AGENT_CARD_NOT_CONFIGURED",
             ne is a2a:ExtendedAgentCardNotConfiguredError, ne is a2a:Error ? ne.message() : "unexpectedly succeeded");

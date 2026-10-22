@@ -1,4 +1,4 @@
-// ballerina/a2a HttpClient against a deliberately awkward server (interop/hostile-server/hostile.py).
+// ballerina/a2a RestClient against a deliberately awkward server (interop/hostile-server/hostile.py).
 // Each case prints what the client did: OK (with the decoded state or events), ERR (the typed error and message),
 // or PANIC (trapped). The expected outcome, and the rule it comes from, is printed alongside so a reader can judge.
 import ballerina/a2a;
@@ -9,7 +9,7 @@ configurable string base = "http://localhost:9850";
 // Short, so a case that hangs shows up as a timeout instead of stalling the run.
 configurable decimal timeoutSeconds = 8;
 
-function mkClient(string c) returns a2a:HttpClient|error {
+function mkClient(string c) returns a2a:RestClient|error {
     a2a:AgentCard card = check a2a:resolveAgentCard(string `${base}/${c}`);
     return new (card, clientConfig = {timeout: timeoutSeconds, httpVersion: "1.1"});
 }
@@ -45,7 +45,7 @@ function unary(string c, string expect) {
 }
 
 function sendOnce(string c) returns a2a:Task|a2a:Message|error {
-    a2a:HttpClient cl = check mkClient(c);
+    a2a:RestClient cl = check mkClient(c);
     return cl->sendMessage(req());
 }
 
@@ -56,7 +56,7 @@ function list(string c, string expect) {
 }
 
 function listOnce(string c) returns a2a:ListTasksResponse|error {
-    a2a:HttpClient cl = check mkClient(c);
+    a2a:RestClient cl = check mkClient(c);
     return cl->listTasks({});
 }
 
@@ -68,7 +68,7 @@ function pushList(string c, string expect) {
 }
 
 function pushListOnce(string c) returns a2a:ListTaskPushNotificationConfigsResponse|error {
-    a2a:HttpClient cl = check mkClient(c);
+    a2a:RestClient cl = check mkClient(c);
     return cl->listTaskPushNotificationConfigs({taskId: "t-1"});
 }
 
@@ -79,7 +79,7 @@ function streamed(string c, string expect) {
 }
 
 function streamOnce(string c) returns string|error {
-    a2a:HttpClient cl = check mkClient(c);
+    a2a:RestClient cl = check mkClient(c);
     stream<a2a:StreamResponse, a2a:Error?> st = check cl->sendStreamingMessage(req());
     string[] kinds = [];
     int textLen = 0;

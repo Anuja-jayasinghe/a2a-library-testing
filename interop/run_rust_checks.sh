@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fifth-language pair, both directions, against a2a-rs (a2a-server-lf 0.4.4 / a2a-client-lf 0.2.5, HTTP+JSON, A2A v1.0):
-#   R-A: ballerina/a2a HttpClient -> rust-agent agent (Claude-backed if ANTHROPIC_API_KEY is set, else a stub)
+#   R-A: ballerina/a2a RestClient -> rust-agent agent (Claude-backed if ANTHROPIC_API_KEY is set, else a stub)
 #   R-C: a2a-rs client            -> ballerina/a2a Listener
 # The Rust side runs in Docker (rust:1-bookworm), so nothing is installed on the host. Build once with:
 #   cd rust-agent && docker run --rm -v "$PWD":/w -v a2a-cargo-reg:/usr/local/cargo/registry -v a2a-rs-target:/w/target \

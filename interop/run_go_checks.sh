@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fourth-language pair, both directions, against a2a-go v2.6.0 (HTTP+JSON, A2A v1.0):
-#   G-A: ballerina/a2a HttpClient -> go-agent/agent  (Claude-backed if ANTHROPIC_API_KEY is set, else a stub)
+#   G-A: ballerina/a2a RestClient -> go-agent/agent  (Claude-backed if ANTHROPIC_API_KEY is set, else a stub)
 #   G-C: a2a-go client            -> ballerina/a2a Listener
 # Known, recorded failures (RESULTS.md findings 24, 25): G-A "statusTimestampAfter in the future" (Go sends "tasks":null);
 # G-C typed errors (Go client only decodes application/json error bodies).

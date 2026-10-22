@@ -312,7 +312,7 @@ import ballerina/io;
 
 public function main() returns error? {
     a2a:AgentCard card = check a2a:resolveAgentCard("http://localhost:9611");
-    a2a:HttpClient client = check new (card);
+    a2a:RestClient client = check new (card);
     a2a:Task|a2a:Message reply = check client->sendMessage({
         message: {messageId: "hello-1", role: a2a:ROLE_USER, parts: [{text: "Hello"}]}
     });
@@ -357,7 +357,7 @@ isolated service on new a2a:RestListener(9611, publicUrl = "http://localhost:961
 
     isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
             returns a2a:Task|a2a:Message|a2a:Error {
-        return self.handler.sendMessage(context, request);
+        return self.handler.onSendMessage(context, request);
     }
 }
 ```

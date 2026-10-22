@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs interop pairs B and D from INTEROP_AND_AUTH_TEST_PLAN.md:
-#   B: ballerina/a2a's HttpClient           -> the real a2a-java reference server (helloworld example)
+#   B: ballerina/a2a's RestClient           -> the real a2a-java reference server (helloworld example)
 #   D: the real a2a-java reference client   -> ballerina/a2a's Listener
 #
 # Unlike the Python pair, this doesn't vendor a runnable copy of the Java side:

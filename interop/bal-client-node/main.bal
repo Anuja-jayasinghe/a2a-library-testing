@@ -1,4 +1,4 @@
-// ballerina/a2a HttpClient -> a real @a2a-js/sdk 1.2.1 agent (interop/node-agent, HTTP+JSON, A2A v1.0).
+// ballerina/a2a RestClient -> a real @a2a-js/sdk 1.2.1 agent (interop/node-agent, HTTP+JSON, A2A v1.0).
 // Assertions are on protocol behaviour, never on reply wording.
 import ballerina/a2a;
 import ballerina/io;
@@ -37,7 +37,7 @@ public function main(string url = "http://localhost:9800") returns error? {
     a2a:AgentCard card = check a2a:resolveAgentCard(url);
     expect("card resolved", card.name.length() > 0, card.name);
     expect("card declares streaming", card.capabilities.streaming == true);
-    a2a:HttpClient c = check new (card);
+    a2a:RestClient c = check new (card);
 
     io:println("== I3: blocking send -> completed Task + artifact ==");
     a2a:Task|a2a:Message|a2a:Error r = c->sendMessage(user("n-1", "what is 2+2?"));

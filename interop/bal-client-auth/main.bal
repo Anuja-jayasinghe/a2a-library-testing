@@ -19,7 +19,7 @@ public function main() returns error? {
     io:println("schemes: ", card.securitySchemes is map<a2a:SecurityScheme> ? (<map<a2a:SecurityScheme>>card.securitySchemes).keys() : []);
 
     io:println("== X-A3: no credential configured -> rejected ==");
-    a2a:HttpClient anon = check new (card);
+    a2a:RestClient anon = check new (card);
     a2a:Task|a2a:Message|a2a:Error r1 = anon->sendMessage({
         message: {messageId: "m-anon", role: a2a:ROLE_USER, parts: [{text: "hi"}]}
     });
@@ -28,7 +28,7 @@ public function main() returns error? {
     io:println("== X-A3: credential resolved by scheme name, from the card alone ==");
     string token = check mint("alice");
     a2a:InMemoryCredentialStore store = new ({"bearerAuth": token});
-    a2a:HttpClient authed = check new (card, credentials = store);
+    a2a:RestClient authed = check new (card, credentials = store);
     a2a:Task|a2a:Message|a2a:Error r2 = authed->sendMessage({
         message: {messageId: "m-authed", role: a2a:ROLE_USER, parts: [{text: "hi"}]}
     });

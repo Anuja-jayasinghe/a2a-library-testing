@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs interop pairs A and C from INTEROP_AND_AUTH_TEST_PLAN.md:
-#   A: ballerina/a2a's HttpClient  -> the real a2a-sdk 1.1.5 agent (python-agent/)
+#   A: ballerina/a2a's RestClient  -> the real a2a-sdk 1.1.5 agent (python-agent/)
 #   C: the real a2a-sdk 1.1.5 Client -> ballerina/a2a's Listener (bal-listener/)
 #
 # Requires: ballerina/a2a already published to the local repository
