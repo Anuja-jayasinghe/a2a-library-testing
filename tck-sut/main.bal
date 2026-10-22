@@ -103,16 +103,16 @@ isolated service class TckBaseService {
     isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error => buildCard([tckSkill]);
 
     isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
-            returns a2a:Task|a2a:Message|a2a:Error => self.handler.sendMessage(context, request);
+            returns a2a:Task|a2a:Message|a2a:Error => self.handler.onSendMessage(context, request);
 
     isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.getTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onGetTask(context, request);
 
     isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
-            returns a2a:ListTasksResponse|a2a:Error => self.handler.listTasks(context, request);
+            returns a2a:ListTasksResponse|a2a:Error => self.handler.onListTasks(context, request);
 
     isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.cancelTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onCancelTask(context, request);
 }
 
 isolated service class TckFullService {
@@ -126,38 +126,38 @@ isolated service class TckFullService {
     isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error => buildCard([tckSkill]);
 
     isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
-            returns a2a:Task|a2a:Message|a2a:Error => self.handler.sendMessage(context, request);
+            returns a2a:Task|a2a:Message|a2a:Error => self.handler.onSendMessage(context, request);
 
     isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
-            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.sendStreamingMessage(context, request);
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.onSendStreamingMessage(context, request);
 
     isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
-            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.subscribeToTask(context, request);
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.onSubscribeToTask(context, request);
 
     isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.getTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onGetTask(context, request);
 
     isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
-            returns a2a:ListTasksResponse|a2a:Error => self.handler.listTasks(context, request);
+            returns a2a:ListTasksResponse|a2a:Error => self.handler.onListTasks(context, request);
 
     isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.cancelTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onCancelTask(context, request);
 
     isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context,
             a2a:TaskPushNotificationConfig request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
-        self.handler.createTaskPushNotificationConfig(context, request);
+        self.handler.onCreateTaskPushNotificationConfig(context, request);
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
             a2a:GetTaskPushNotificationConfigRequest request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
-        self.handler.getTaskPushNotificationConfig(context, request);
+        self.handler.onGetTaskPushNotificationConfig(context, request);
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context,
             a2a:ListTaskPushNotificationConfigsRequest request) returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error =>
-        self.handler.listTaskPushNotificationConfigs(context, request);
+        self.handler.onListTaskPushNotificationConfigs(context, request);
 
     isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
             a2a:DeleteTaskPushNotificationConfigRequest request) returns a2a:Error? =>
-        self.handler.deleteTaskPushNotificationConfig(context, request);
+        self.handler.onDeleteTaskPushNotificationConfig(context, request);
 }
 
 isolated service class TckExtendedService {
@@ -171,41 +171,41 @@ isolated service class TckExtendedService {
     isolated resource function get agentCard() returns a2a:AgentCard|a2a:Error => buildCard([tckSkill]);
 
     isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
-            returns a2a:Task|a2a:Message|a2a:Error => self.handler.sendMessage(context, request);
+            returns a2a:Task|a2a:Message|a2a:Error => self.handler.onSendMessage(context, request);
 
     isolated resource function post message\:stream(a2a:Context context, a2a:SendMessageRequest request)
-            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.sendStreamingMessage(context, request);
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.onSendStreamingMessage(context, request);
 
     isolated resource function get tasks/[string id]/subscribe(a2a:Context context, a2a:SubscribeToTaskRequest request)
-            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.subscribeToTask(context, request);
+            returns stream<a2a:StreamResponse, a2a:Error?>|a2a:Error => self.handler.onSubscribeToTask(context, request);
 
     isolated resource function get tasks/[string id](a2a:Context context, a2a:GetTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.getTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onGetTask(context, request);
 
     isolated resource function get tasks(a2a:Context context, a2a:ListTasksRequest request)
-            returns a2a:ListTasksResponse|a2a:Error => self.handler.listTasks(context, request);
+            returns a2a:ListTasksResponse|a2a:Error => self.handler.onListTasks(context, request);
 
     isolated resource function post tasks/[string id]/cancel(a2a:Context context, a2a:CancelTaskRequest request)
-            returns a2a:Task|a2a:Error => self.handler.cancelTask(context, request);
+            returns a2a:Task|a2a:Error => self.handler.onCancelTask(context, request);
 
     isolated resource function post tasks/[string id]/pushNotificationConfigs(a2a:Context context,
             a2a:TaskPushNotificationConfig request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
-        self.handler.createTaskPushNotificationConfig(context, request);
+        self.handler.onCreateTaskPushNotificationConfig(context, request);
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
             a2a:GetTaskPushNotificationConfigRequest request) returns a2a:TaskPushNotificationConfig|a2a:Error =>
-        self.handler.getTaskPushNotificationConfig(context, request);
+        self.handler.onGetTaskPushNotificationConfig(context, request);
 
     isolated resource function get tasks/[string id]/pushNotificationConfigs(a2a:Context context,
             a2a:ListTaskPushNotificationConfigsRequest request) returns a2a:ListTaskPushNotificationConfigsResponse|a2a:Error =>
-        self.handler.listTaskPushNotificationConfigs(context, request);
+        self.handler.onListTaskPushNotificationConfigs(context, request);
 
     isolated resource function delete tasks/[string id]/pushNotificationConfigs/[string configId](a2a:Context context,
             a2a:DeleteTaskPushNotificationConfigRequest request) returns a2a:Error? =>
-        self.handler.deleteTaskPushNotificationConfig(context, request);
+        self.handler.onDeleteTaskPushNotificationConfig(context, request);
 
     isolated resource function get extendedAgentCard(a2a:Context context, a2a:GetExtendedAgentCardRequest request)
-            returns a2a:AgentCard|a2a:Error => self.handler.getExtendedAgentCard(context, request);
+            returns a2a:AgentCard|a2a:Error => self.handler.onGetExtendedAgentCard(context, request);
 }
 
 isolated class TckAgentExecutor {
