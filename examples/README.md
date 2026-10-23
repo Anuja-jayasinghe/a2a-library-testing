@@ -357,7 +357,7 @@ isolated service on new a2a:RestListener(9611, publicUrl = "http://localhost:961
 
     isolated resource function post message\:send(a2a:Context context, a2a:SendMessageRequest request)
             returns a2a:Task|a2a:Message|a2a:Error {
-        return self.handler.onSendMessage(context, request);
+        return self.handler.handleSendMessage(context, request);
     }
 }
 ```
